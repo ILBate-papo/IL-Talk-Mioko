@@ -1,0 +1,42 @@
+IL TALK MIOKO — PACOTE LIMPO PARA O WORK-SAN
+
+ESCOPO ABSOLUTO
+- Repositório permitido: ILBate-papo/IL-Talk-Mioko
+- Supabase permitido: IL Talk Cursos de Idiomas, project ref lxjbpklzrhylmlyepdkc
+- NÃO TOCAR: ILBate-papo/IL-Bate-Papo
+- NÃO TOCAR: IL-Chta/IL-Chat / IL Chats
+- NÃO TOCAR: IL Chats Mail
+- NÃO reutilizar Auth, Storage, tabelas, Edge Functions ou dados dos projetos antigos.
+- NÃO reorganizar, limpar, padronizar, migrar ou corrigir projetos fora do IL Talk.
+
+PRESERVAÇÃO VISUAL OBRIGATÓRIA
+- O leão e o banner existentes em assets/il-talk-logo.png e assets/il-talk-leao.png estão APROVADOS.
+- NÃO regenerar, recolorir, filtrar, clarear, escurecer, recortar, substituir ou aplicar processamento de pixels nesses arquivos.
+- NÃO remover as bandeiras/cursos nem simplificar a interface para um teste isolado.
+- A imagem assets/mioko-professora.png é a Mioko aprovada para esta etapa. Não substituir sem ordem do usuário.
+
+CÉREBRO DA MIOKO
+- A Edge Function deve se chamar il-ai e ser criada SOMENTE no Supabase lxjbpklzrhylmlyepdkc.
+- OPENAI_API_KEY já está armazenada como secret no Supabase. NUNCA colocar a chave no frontend, GitHub, commit, log ou README.
+- Usar OpenAI Responses API. O modelo configurado nesta base é gpt-6-luna.
+- Mioko deve responder primeiro à pergunta real, manter contexto, conversar naturalmente e ensinar idiomas quando apropriado.
+- Não reiniciar a aula nem repetir a apresentação em toda mensagem.
+- Testes mínimos antes de declarar sucesso: "0 + 0?" => 0; "1 + 1?" => 2; uma pergunta geral; uma continuação que dependa do turno anterior.
+- Se houver erro, mostrar o erro real durante o diagnóstico. Não mascarar com resposta pronta.
+
+ORDEM DE EXECUÇÃO
+1. Inspecionar este pacote antes de editar.
+2. Confirmar que o destino é ILBate-papo/IL-Talk-Mioko.
+3. Confirmar que o Supabase é lxjbpklzrhylmlyepdkc.
+4. Publicar/ajustar il-ai nesse Supabase.
+5. Testar a Edge Function diretamente.
+6. Só depois integrar/testar o frontend deste pacote.
+7. Ativar GitHub Pages somente no novo repositório.
+8. Não implementar mudanças cosméticas no leão, curso ou outros produtos.
+
+VOZ / BOCA
+- Não é permitido sacrificar o cérebro para mexer na boca.
+- Primeiro texto/IA funcionando. Depois voz estável. Depois sincronização da boca por áudio real.
+- Microfone e câmera são opcionais; o curso deve funcionar integralmente por texto.
+
+Este pacote contém apenas a base do IL Talk/Mioko e não carrega o histórico/zoológico do IL Chats.
