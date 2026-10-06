@@ -751,3 +751,11 @@
 .miokoVideoPortrait{width:100%;height:205px;object-fit:cover;object-position:50% 25%;border-radius:14px 14px 8px 8px;display:block;margin-bottom:8px;}
 .miokoVideo{padding:10px;overflow:hidden;}
 @media(max-width:760px){.miokoVideoPortrait{height:230px}.miokoPortrait{width:96px;height:96px}}
+
+/* Mioko áudio/vídeo unificado */
+#userVideo{width:100%;height:100%;min-height:180px;object-fit:cover;border-radius:16px;background:#050914}
+.video.calling{box-shadow:0 0 0 2px #2ad8ff,0 0 28px #2ad8ff55}
+.miokoVideo.speaking{animation:miokoTalk .34s ease-in-out infinite alternate}
+@keyframes miokoTalk{from{filter:brightness(1);transform:scale(1)}to{filter:brightness(1.08);transform:scale(1.006)}}
+#videoRoom.in-call{position:relative}
+@media(max-width:680px){#userVideo{min-height:150px}.videos{gap:8px}}
