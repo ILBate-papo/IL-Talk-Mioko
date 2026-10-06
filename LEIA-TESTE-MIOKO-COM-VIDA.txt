@@ -1,0 +1,19 @@
+IL TALK MIOKO — TESTE COM VIDA
+Data: 06/10/2026
+
+Este pacote é para substituir os arquivos do repositório ILBate-papo/IL-Talk-Mioko.
+
+O que este teste faz:
+- mantém a digitação disponível;
+- inicia chamada de voz com escuta por reconhecimento de voz quando o navegador suporta;
+- inicia videoconferência com a câmera do usuário;
+- Mioko entra em estado AO VIVO e recebe animação de presença;
+- enquanto o áudio toca, Mioko entra em estado de fala;
+- ao terminar o áudio, o estado de fala é encerrado;
+- tenta usar il-voice antes da voz local do navegador.
+
+IMPORTANTE:
+- Não mexer em IL Chats, IL Bate Papo ou IL Chats Mail.
+- O pacote precisa ser publicado no GitHub Pages para aparecer no endereço público.
+- A função il-voice precisa estar publicada no Supabase para a voz própria funcionar.
+- Esta etapa é um teste funcional de presença/animação; não é vídeo humano gerado nem sincronização labial fotorealista.
