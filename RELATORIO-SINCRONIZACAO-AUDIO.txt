@@ -1,0 +1,31 @@
+IL TALK MIOKO — SINCRONIZAÇÃO POR ÁUDIO — 06/10/2026
+
+Escopo: somente ILBate-papo/IL-Talk-Mioko.
+Arquivos alterados: app.js, app.css, mioko-avatar.js (novo).
+Commit LOCAL: 4e6bd48. Não enviado ao GitHub: integração sem permissão de escrita (403); terminal sem credencial.
+Nenhuma nova versão V28/V29/V30. Imagens, logo, HTML, autenticação e implementação da câmera preservados.
+
+A boca é deformada localmente no canvas a partir do retrato aprovado e segue a intensidade RMS do áudio de il-voice pelo AnalyserNode. A imagem original permanece intacta. Não é sincronização de fonemas nem vídeo gerado. No silêncio a imagem volta à posição de repouso. Piscar e respiração são independentes.
+Nenhuma chave OpenAI ou service_role foi adicionada ao frontend.
+
+TESTES EXECUTADOS
+- node --check app.js e mioko-avatar.js; git diff --check: passaram.
+- Chromium: viewport desktop 1366x900 e emulação móvel 393x851.
+- Reprodução de WAV de teste real, com som e silêncio, analisado pelo Web Audio: boca acompanha intensidade e fica imóvel no silêncio.
+- Pausa, término, voz desligada e cancelamento de requisição pendente: passaram.
+- Erro HTTP 429 exibido sem depender de speechSynthesis.
+- Câmera simulada, canvas Mioko e campo de texto coexistem; encerrar libera câmera e interrompe áudio.
+- Histórico enviado à mesma função IA; sem erros JavaScript e sem transbordamento horizontal nesses tamanhos.
+
+SERVIDOR
+- il-ai: HTTP 200; 0+0=0 e 1+1=2. Pergunta geral e continuação responderam.
+- A versão publicada (contrato mioko-v52) não sabe toda a formação de Ildebrando. O arquivo supabase/functions/il-ai/index.ts do repositório já contém a persona completa, mas não foi implantado nesta sessão.
+- il-voice: HTTP 429; OpenAI informou ausência de créditos. Nenhum áudio natural novo pôde ser gerado.
+- Nenhuma função implantada: painel Supabase solicita login; não há credencial administrativa no terminal.
+
+RESULTADO NO CELULAR
+Emulação móvel aprovada para os cenários acima. Aparelho físico, microfone real, reconhecimento de fala real e voz feminina natural NÃO foram validados. Não declarar concluído antes desses testes.
+
+PUBLICAÇÃO
+Site existente: https://ilbate-papo.github.io/IL-Talk-Mioko/
+O site NÃO foi atualizado nesta sessão. ZIP pronto para revisão/publicação, após liberar escrita no GitHub. Para completar, obter acesso autenticado ao Supabase lxjbpklzrhylmlyepdkc, atualizar il-ai se necessário e restabelecer o saldo OpenAI usado por il-voice; depois validar áudio natural em celular e computador.

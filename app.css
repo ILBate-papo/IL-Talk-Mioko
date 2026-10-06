@@ -767,3 +767,11 @@
 .miokoVideo.speaking .miokoVideoPortrait{animation:miokoSpeaking .24s ease-in-out infinite alternate!important}
 @keyframes miokoAlive{0%,100%{transform:translateY(0) rotate(0deg)}45%{transform:translateY(-2px) rotate(-.18deg)}55%{transform:translateY(-2px) rotate(.18deg)}}
 @keyframes miokoSpeaking{from{transform:translateY(0) scale(1)}to{transform:translateY(-2px) scale(1.012)}}
+
+/* Mouth follows real audio; breathing is independent and restrained. */
+.miokoVideo.speaking{animation:none;filter:none;transform:none}
+.miokoVideo.speaking .miokoVideoPortrait{animation:miokoBreathing 5s ease-in-out infinite!important}
+.miokoVideo .miokoVideoPortrait,.miokoVideo.calling .miokoVideoPortrait{animation:miokoBreathing 5s ease-in-out infinite;transform-origin:50% 75%}
+.miokoVideo.calling::after{content:"Em conversa"}
+@keyframes miokoBreathing{0%,100%{transform:translateY(0)}50%{transform:translateY(-1px)}}
+@media(prefers-reduced-motion:reduce){.miokoVideo .miokoVideoPortrait,.miokoVideo.speaking .miokoVideoPortrait,.miokoVideo.calling .miokoVideoPortrait{animation:none!important}}
