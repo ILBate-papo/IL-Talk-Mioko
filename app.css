@@ -759,3 +759,11 @@
 @keyframes miokoTalk{from{filter:brightness(1);transform:scale(1)}to{filter:brightness(1.08);transform:scale(1.006)}}
 #videoRoom.in-call{position:relative}
 @media(max-width:680px){#userVideo{min-height:150px}.videos{gap:8px}}
+
+/* Mioko Sensei VIDA — animação de presença e fala */
+.miokoVideo{position:relative;transform-origin:50% 85%;transition:.2s ease}
+.miokoVideo.calling .miokoVideoPortrait{animation:miokoAlive 3.2s ease-in-out infinite;transform-origin:50% 75%}
+.miokoVideo.calling::after{content:"● AO VIVO";position:absolute;top:18px;left:18px;background:#b40024;color:#fff;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:800;box-shadow:0 0 12px #ff1744aa}
+.miokoVideo.speaking .miokoVideoPortrait{animation:miokoSpeaking .24s ease-in-out infinite alternate!important}
+@keyframes miokoAlive{0%,100%{transform:translateY(0) rotate(0deg)}45%{transform:translateY(-2px) rotate(-.18deg)}55%{transform:translateY(-2px) rotate(.18deg)}}
+@keyframes miokoSpeaking{from{transform:translateY(0) scale(1)}to{transform:translateY(-2px) scale(1.012)}}
