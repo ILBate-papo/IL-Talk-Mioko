@@ -1,0 +1,21 @@
+IL TALK MIOKO — CORREÇÃO SEGURA DO SOM
+
+Correção aplicada sem alterar IL Chats, IL Bate Papo ou IL Chats Mail.
+
+Problema encontrado:
+- O botão mostrava “Voz ligada”, mas o JavaScript iniciava com voice=false.
+- Assim, a função say() recusava falar mesmo com a interface dizendo que a voz estava ligada.
+
+Correção:
+- Voz inicia ligada, salvo se o usuário tiver desligado explicitamente.
+- Preferência de voz fica salva no navegador.
+- Seleção prioriza voz compatível com o idioma e, quando disponível, voz feminina.
+- Mantido fallback para qualquer voz disponível no idioma.
+- IA/texto/configuração do Supabase não foram trocados.
+
+Teste:
+1. Abra o site e entre.
+2. Confirme botão “🔊 Voz ligada”.
+3. Clique COMEÇAR AULA: a Mioko deve falar.
+4. Escreva uma pergunta: depois da resposta escrita, a Mioko deve falar a mesma resposta.
+5. Se o navegador bloquear áudio, clique uma vez em “Voz desligada” e novamente em “Voz ligada”.
