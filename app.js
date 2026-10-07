@@ -463,6 +463,18 @@
     };
   });
 
+  // Register Italian before binding the shared language controls.
+  if (!document.querySelector('[data-lang="Italiano"]')) {
+    const italian = document.createElement("button");
+    italian.type = "button";
+    italian.className = "nb";
+    italian.dataset.lang = "Italiano";
+    italian.textContent = "🇮🇹 Italiano";
+    const other = document.querySelector('[data-lang="Outro"]');
+    if (other) other.before(italian);
+    else document.querySelector(".langs")?.appendChild(italian);
+  }
+
   document.querySelectorAll("[data-lang]").forEach(b => {
     b.classList.toggle("sel", b.dataset.lang === lang);
     b.onclick = () => {
