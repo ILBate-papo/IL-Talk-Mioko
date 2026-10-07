@@ -775,3 +775,17 @@
 .miokoVideo.calling::after{content:"Em conversa"}
 @keyframes miokoBreathing{0%,100%{transform:translateY(0)}50%{transform:translateY(-1px)}}
 @media(prefers-reduced-motion:reduce){.miokoVideo .miokoVideoPortrait,.miokoVideo.speaking .miokoVideoPortrait,.miokoVideo.calling .miokoVideoPortrait{animation:none!important}}
+
+/* Responsive full portrait: preserve head and the signature on the original artwork. */
+#miokoVideo .miokoVideoPortrait{
+  width:100%;
+  height:clamp(230px,48vh,520px);
+  object-fit:contain;
+  object-position:center;
+  background:#050914;
+  flex-shrink:0;
+}
+#miokoVideo{min-width:0}
+@media(max-width:760px){
+  #miokoVideo .miokoVideoPortrait{height:clamp(230px,55vh,420px)}
+}
