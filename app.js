@@ -463,16 +463,16 @@
     };
   });
 
-  // Register Italian before binding the shared language controls.
-  if (!document.querySelector('[data-lang="Italiano"]')) {
-    const italian = document.createElement("button");
-    italian.type = "button";
-    italian.className = "nb";
-    italian.dataset.lang = "Italiano";
-    italian.textContent = "🇮🇹 Italiano";
-    const other = document.querySelector('[data-lang="Outro"]');
-    if (other) other.before(italian);
-    else document.querySelector(".langs")?.appendChild(italian);
+  // Italian replaces the former generic language option.
+  const otherLanguage = document.querySelector('[data-lang="Outro"]');
+  if (otherLanguage) {
+    otherLanguage.dataset.lang = "Italiano";
+    otherLanguage.textContent = "🇮🇹 Italiano";
+  }
+  if (lang === "Outro") {
+    lang = "Italiano";
+    localStorage.ilLang = lang;
+    $("#status").textContent = lang + " • avaliação adaptativa";
   }
 
   document.querySelectorAll("[data-lang]").forEach(b => {
