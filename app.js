@@ -1,34 +1,185 @@
-// Load the approved portrait animator without changing the existing page or camera markup.
-{ const script=document.createElement("script");script.src="mioko-avatar.js";document.head.appendChild(script); }
-(()=>{
-const $=s=>document.querySelector(s);let lang=localStorage.ilLang||"Japonês",voice=localStorage.ilVoice!=="off",h=JSON.parse(localStorage.ilHistory||"[]"),stream=null,currentAudio=null,callMode=null,recognition=null,listening=false;
-const lc={Japonês:"ja-JP",Inglês:"en-US",Espanhol:"es-ES",Francês:"fr-FR",Coreano:"ko-KR",Português:"pt-BR",Outro:"pt-BR"};
-$("#voice").textContent=voice?"🔊 Voz ligada":"🔇 Voz desligada";
-$("#enter").onclick=()=>{$("#login").classList.add("hide");$("#app").classList.remove("hide")};
-function stopListening(){listening=false;if(recognition){try{recognition.stop()}catch(e){}}}
-function stopMedia(){stopSpeech();stopListening();callMode=null;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}const v=$("#userVideo");if(v){v.srcObject=null;v.hidden=true}$("#userPlaceholder")?.removeAttribute("hidden");if($("#cameraStatus"))$("#cameraStatus").textContent="Câmera opcional";$("#videoRoom")?.classList.remove("in-call");$("#miokoVideo")?.classList.remove("calling","speaking")}
-$("#exitCourse").onclick=()=>{stopSpeech();stopMedia();$("#app").classList.add("hide");$("#login").classList.remove("hide");$("#pass").value="";scrollTo(0,0)};
-document.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-mode]").forEach(x=>x.classList.remove("active"));b.classList.add("active")});
-document.querySelectorAll("[data-lang]").forEach(b=>{if(b.dataset.lang===lang)b.classList.add("sel");b.onclick=()=>{document.querySelectorAll("[data-lang]").forEach(x=>x.classList.remove("sel"));b.classList.add("sel");lang=b.dataset.lang;localStorage.ilLang=lang;$("#status").textContent=lang+" • avaliação adaptativa"}});
-function add(c,t,save=false){const d=document.createElement("div");d.className="msg "+c;d.innerHTML="<b>"+(c==="user"?"Você":"Mioko IA")+"</b><p></p>";d.querySelector("p").textContent=t;$("#chat").appendChild(d);$("#chat").scrollTop=$("#chat").scrollHeight;if(save){h.push({role:c==="ai"?"assistant":"user",content:t});h=h.slice(-30);localStorage.ilHistory=JSON.stringify(h)}}
-function cleanSpeech(t){return String(t).replace(/[*#_`~]+/g," ").replace(/https?:\/\/\S+/g," ").replace(/\s+/g," ").trim()}
-function headers(){const c=window.IL_TALK_CONFIG||{},x={"Content-Type":"application/json"};if(c.SUPABASE_PUBLISHABLE_KEY){x.apikey=c.SUPABASE_PUBLISHABLE_KEY;return x}if(c.SUPABASE_ANON_KEY){x.apikey=c.SUPABASE_ANON_KEY;x.Authorization="Bearer "+c.SUPABASE_ANON_KEY}return x}
-let audioContext=null,analyser=null,audioFrame=0,voiceRequest=null,voiceGeneration=0,audioUrl=null,speechPending=false,audioCleanup=null,replyPending=false,voiceInputBlocked=false;
-function closeMouth(){cancelAnimationFrame(audioFrame);audioFrame=0;window.MiokoAvatar?.closeMouth();$("#miokoVideo")?.classList.remove("speaking")}
-function stopSpeech(){voiceGeneration++;voiceRequest?.abort();voiceRequest=null;speechPending=false;closeMouth();audioCleanup?.();audioCleanup=null;if(currentAudio){const a=currentAudio;currentAudio=null;a.pause();a.removeAttribute("src");a.load()}if(audioUrl){URL.revokeObjectURL(audioUrl);audioUrl=null}}
-function unlockAudio(){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return Promise.reject(Error("Web Audio indisponível neste navegador"));if(!audioContext){audioContext=new AC();audioContext.onstatechange=()=>{if(audioContext.state!=="running")closeMouth();else if(currentAudio&&!currentAudio.paused)analyseAudio(currentAudio)}}return audioContext.resume()}
-function analyseAudio(a){closeMouth();const samples=new Uint8Array(analyser.fftSize);function tick(){if(a!==currentAudio||a.paused||a.ended||a.readyState<3||audioContext.state!=="running"){closeMouth();return}analyser.getByteTimeDomainData(samples);let sum=0;for(const sample of samples){const v=(sample-128)/128;sum+=v*v}const rms=Math.sqrt(sum/samples.length);window.MiokoAvatar?.setMouth(rms<.012?0:Math.min(1,(rms-.012)*7));audioFrame=requestAnimationFrame(tick)}tick()}
-async function say(t){if(!voice)return;stopListening();stopSpeech();const generation=voiceGeneration,text=cleanSpeech(t),c=window.IL_TALK_CONFIG||{};speechPending=true;const controller=new AbortController();voiceRequest=controller;try{await unlockAudio();if(!c.VOICE_ENDPOINT)throw Error("Função il-voice não configurada");const r=await fetch(c.VOICE_ENDPOINT,{method:"POST",headers:headers(),signal:controller.signal,body:JSON.stringify({text,language:lang})});if(!r.ok){const detail=await r.text();throw Error("il-voice HTTP "+r.status+": "+detail.slice(0,300))}const blob=await r.blob();if(generation!==voiceGeneration)return;if(!blob.type.startsWith("audio/"))throw Error("il-voice não devolveu áudio");const url=URL.createObjectURL(blob),a=new Audio(url);audioUrl=url;currentAudio=a;analyser=audioContext.createAnalyser();analyser.fftSize=1024;const source=audioContext.createMediaElementSource(a);source.connect(analyser);analyser.connect(audioContext.destination);const node=analyser;audioCleanup=()=>{source.disconnect();node.disconnect()};const finish=()=>{if(a!==currentAudio)return;closeMouth();audioCleanup?.();audioCleanup=null;currentAudio=null;speechPending=false;URL.revokeObjectURL(url);audioUrl=null;if(callMode)setTimeout(startListening,250)};a.onplaying=()=>analyseAudio(a);const quiet=()=>{if(a===currentAudio)closeMouth()};a.onpause=quiet;a.onwaiting=quiet;a.onstalled=quiet;a.onended=finish;a.onerror=()=>{if(a!==currentAudio)return;finish();add("ai","Não foi possível reproduzir a voz. Você pode continuar por texto.")};await a.play();if(generation!==voiceGeneration){a.pause();closeMouth()}}catch(e){if(generation!==voiceGeneration||e.name==="AbortError")return;stopSpeech();add("ai","❌ Voz indisponível: "+e.message+". A conversa por texto continua disponível.")}}
-window.addEventListener("pagehide",stopSpeech);
-$("#voice").onclick=()=>{voice=!voice;localStorage.ilVoice=voice?"on":"off";$("#voice").textContent=voice?"🔊 Voz ligada":"🔇 Voz desligada";if(!voice){stopSpeech();$("#miokoVideo")?.classList.remove("speaking")}};
-$("#begin").onclick=()=>{unlockAudio().catch(()=>{});const t=`Olá. Sou Mioko, Professora Virtual de Idiomas. Podemos conversar sobre qualquer assunto e eu adapto o ensino de ${lang} ao seu nível. O que você gostaria de conversar ou aprender?`;add("ai",t,true);say(t)};
-function endpoint(){const c=window.IL_TALK_CONFIG||{};return c.AI_ENDPOINT||(c.SUPABASE_PROJECT_REF?`https://${c.SUPABASE_PROJECT_REF}.supabase.co/functions/v1/il-ai`:"")}
-let replyQueue=Promise.resolve();function send(x){if(voice)unlockAudio().catch(()=>{});const m=(x||$("#text").value).trim();if(!m)return;$("#text").value="";stopSpeech();replyQueue=replyQueue.then(()=>sendMessage(m));return replyQueue}
-async function sendMessage(x){replyPending=true;stopListening();const replyGeneration=voiceGeneration;const m=(x||$("#text").value).trim();if(!m)return;add("user",m,true);$("#text").value="";const ep=endpoint();if(!ep){replyPending=false;add("ai","⚙️ Falta ligar a função il-ai em config.js.");return}const wait=document.createElement("div");wait.className="msg ai";wait.innerHTML="<b>Mioko IA</b><p>🧠 Pensando...</p>";$("#chat").appendChild(wait);try{const r=await fetch(ep,{method:"POST",headers:headers(),body:JSON.stringify({message:m,language:lang,history:h.slice(0,-1).slice(-16)})});const raw=await r.text();let d;try{d=JSON.parse(raw)}catch{throw Error("Backend devolveu resposta inválida")};if(!r.ok)throw Error("HTTP "+r.status+": "+(d.error||d.message||"Falha"));const a=d.answer||d.reply||d.output_text||d.target||d.japanese;if(!a)throw Error("A função respondeu sem texto.");wait.remove();add("ai",String(a),true);if(replyGeneration===voiceGeneration)say(String(a))}catch(e){wait.remove();add("ai","❌ IA não conectou: "+e.message)}finally{replyPending=false;if(callMode&&!speechPending&&!currentAudio)setTimeout(startListening,500)}}
-$("#send").onclick=()=>{unlockAudio().catch(()=>{});send()};$("#text").onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send()}};document.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>send(b.dataset.q));
-async function startVideo(){if(stream){stopMedia();$("#videoCall").textContent="📹 Vídeo IA";$("#voiceCall").textContent="📞 Chamada IA";return}try{stream=await navigator.mediaDevices.getUserMedia({video:true,audio:true});callMode="video";const v=$("#userVideo");v.srcObject=stream;v.hidden=false;$("#userPlaceholder").hidden=true;$("#cameraStatus").textContent="Câmera e microfone ativos";$("#videoRoom").classList.add("in-call");$("#miokoVideo").classList.add("calling");$("#videoCall").textContent="⏹ Encerrar vídeo";add("ai","Videoconferência com a Mioko Sensei iniciada. Pode falar comigo ou continuar escrevendo normalmente.");startListening();}catch(e){add("ai","Não consegui abrir câmera/microfone: "+e.message+". Você pode continuar escrevendo normalmente.")}}
-$("#videoCall").onclick=()=>{unlockAudio().catch(()=>{});voice=true;localStorage.ilVoice="on";$("#voice").textContent="🔊 Voz ligada";startVideo()};
-$("#voiceCall").onclick=()=>{voiceInputBlocked=false;unlockAudio().catch(()=>{});if(callMode==="voice"){stopSpeech();stopListening();callMode=null;$("#miokoVideo").classList.remove("calling","speaking");$("#voiceCall").textContent="📞 Chamada IA";add("ai","Chamada encerrada.");return}voice=true;callMode="voice";localStorage.ilVoice="on";$("#voice").textContent="🔊 Voz ligada";$("#miokoVideo").classList.add("calling");add("ai","Chamada com a Mioko Sensei iniciada. Pode falar comigo ou escrever; eu responderei por áudio.");$("#voiceCall").textContent="⏹ Encerrar chamada";startListening()};
-$("#photo").onclick=()=>$("#photoIn").click();$("#file").onclick=()=>$("#fileIn").click();["#photoIn","#fileIn"].forEach(id=>$(id).onchange=e=>{const f=e.target.files[0];if(f)add("user","Arquivo selecionado: "+f.name+" (upload seguro será ligado ao backend).")});
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition;function startListening(){if(!callMode||!SR||listening||currentAudio||speechPending||replyPending||voiceInputBlocked)return;recognition=new SR();recognition.lang="pt-BR";recognition.continuous=false;recognition.interimResults=false;recognition.onstart=()=>{listening=true;$("#mic").textContent="🎙️ Ouvindo..."};recognition.onresult=e=>{const spoken=e.results[e.results.length-1][0].transcript.trim();if(spoken){$("#text").value=spoken;send(spoken)}};recognition.onend=()=>{listening=false;$("#mic").textContent="🎙️ Microfone opcional";if(callMode&&!currentAudio&&!speechPending)setTimeout(startListening,500)};recognition.onerror=e=>{listening=false;if(["not-allowed","service-not-allowed","audio-capture"].includes(e.error))voiceInputBlocked=true;$("#mic").textContent="🎙️ Microfone opcional";if(!["no-speech","aborted"].includes(e.error))add("ai","Microfone: "+e.error+". Você pode continuar digitando.")};try{recognition.start()}catch(e){listening=false}}if(SR){$("#mic").onclick=()=>{voiceInputBlocked=false;unlockAudio().catch(()=>{});if(callMode){if(listening)stopListening();else startListening()}else{callMode="voice";$("#miokoVideo").classList.add("calling");startListening()}}}else $("#mic").onclick=()=>alert("Este navegador não oferece reconhecimento de voz. Continue a conversa escrevendo; a Mioko continuará respondendo por áudio.");
-})();
+// IL TALK MIOKO — voz alternativa quando o serviço falhar.
+{
+  const script = document.createElement("script");
+  script.src = "mioko-avatar.js";
+  document.head.appendChild(script);
+}
+
+(() => {
+  const $ = s => document.querySelector(s);
+
+  let lang = localStorage.ilLang || "Japonês";
+  let voice = localStorage.ilVoice !== "off";
+  let h;
+  try {
+    h = JSON.parse(localStorage.ilHistory || "[]");
+    if (!Array.isArray(h)) h = [];
+  } catch {
+    h = [];
+  }
+
+  let stream = null;
+  let currentAudio = null;
+  let callMode = null;
+  let recognition = null;
+  let listening = false;
+  let audioContext = null;
+  let analyser = null;
+  let audioFrame = 0;
+  let voiceRequest = null;
+  let voiceGeneration = 0;
+  let audioUrl = null;
+  let speechPending = false;
+  let audioCleanup = null;
+  let replyPending = false;
+  let voiceInputBlocked = false;
+  let nativeUtterance = null;
+  let voiceRetryAfter = 0;
+
+  $("#voice").textContent =
+    voice ? "🔊 Voz ligada" : "🔇 Voz desligada";
+
+  $("#enter").onclick = () => {
+    $("#login").classList.add("hide");
+    $("#app").classList.remove("hide");
+  };
+
+  function stopListening() {
+    listening = false;
+    if (recognition) {
+      try {
+        recognition.stop();
+      } catch {}
+    }
+  }
+
+  function closeMouth() {
+    cancelAnimationFrame(audioFrame);
+    audioFrame = 0;
+    window.MiokoAvatar?.closeMouth();
+    $("#miokoVideo")?.classList.remove("speaking");
+  }
+
+  function stopSpeech() {
+    voiceGeneration++;
+    if (nativeUtterance) {
+      nativeUtterance = null;
+      window.speechSynthesis?.cancel();
+    }
+    voiceRequest?.abort();
+    voiceRequest = null;
+    speechPending = false;
+    closeMouth();
+    audioCleanup?.();
+    audioCleanup = null;
+
+    if (currentAudio) {
+      const a = currentAudio;
+      currentAudio = null;
+      a.pause();
+      a.removeAttribute("src");
+      a.load();
+    }
+
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+      audioUrl = null;
+    }
+  }
+
+  function stopMedia() {
+    callMode = null;
+    stopSpeech();
+    stopListening();
+
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+
+    const v = $("#userVideo");
+    if (v) {
+      v.srcObject = null;
+      v.hidden = true;
+    }
+
+    $("#userPlaceholder")?.removeAttribute("hidden");
+    if ($("#cameraStatus")) {
+      $("#cameraStatus").textContent = "Câmera opcional";
+    }
+
+    $("#videoRoom")?.classList.remove("in-call");
+    $("#miokoVideo")?.classList.remove("calling", "speaking");
+    $("#videoCall").textContent = "📹 Vídeo IA";
+    $("#voiceCall").textContent = "📞 Chamada IA";
+  }
+
+  $("#exitCourse").onclick = () => {
+    stopMedia();
+    $("#app").classList.add("hide");
+    $("#login").classList.remove("hide");
+    $("#pass").value = "";
+    scrollTo(0, 0);
+  };
+
+  document.querySelectorAll("[data-mode]").forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll("[data-mode]").forEach(x => {
+        x.classList.remove("active");
+      });
+      b.classList.add("active");
+    };
+  });
+
+  document.querySelectorAll("[data-lang]").forEach(b => {
+    if (b.dataset.lang === lang) b.classList.add("sel");
+
+    b.onclick = () => {
+      document.querySelectorAll("[data-lang]").forEach(x => {
+        x.classList.remove("sel");
+      });
+      b.classList.add("sel");
+      lang = b.dataset.lang;
+      localStorage.ilLang = lang;
+      $("#status").textContent = lang + " • avaliação adaptativa";
+    };
+  });
+
+  function add(c, t, save = false) {
+    const d = document.createElement("div");
+    d.className = "msg " + c;
+    d.innerHTML =
+      "<b>" + (c === "user" ? "Você" : "Mioko IA") + "</b><p></p>";
+    d.querySelector("p").textContent = t;
+    $("#chat").appendChild(d);
+    $("#chat").scrollTop = $("#chat").scrollHeight;
+
+    if (save) {
+      h.push({
+        role: c === "ai" ? "assistant" : "user",
+        content: t
+      });
+      h = h.slice(-30);
+      localStorage.ilHistory = JSON.stringify(h);
+    }
+  }
+
+  function cleanSpeech(t) {
+    return String(t)
+      .replace(/[*#_`~]+/g, " ")
+      .replace(/https?:\/\/\S+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function headers() {
+    const c = window.IL_TALK_CONFIG || {};
+    const x = { "Content-Type": "application/json" };
+
+    if (c.SUPABASE_PUBLISHABLE_KEY) {
+      x.apikey = c.SUPABASE_PUBLISHABLE_KEY;
+      return x;
+    }
+
+    if (c.SUPABASE_ANON_KEY) {
+      x.apikey =
