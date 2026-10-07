@@ -43,6 +43,20 @@
   }
   voiceLabel();
 
+  function enableVoice() {
+    voice = true;
+    localStorage.ilVoice = "on";
+    voiceLabel();
+    prepareAudio();
+  }
+
+  function greetCall() {
+    const greeting = "Olá! Sou a Mioko. Estou aqui para conversar com você. Como você está?";
+    add("ai", greeting, true);
+    say(greeting);
+    if (!SR) add("ai", "Este navegador não oferece reconhecimento de voz. Você pode continuar digitando e ouvir minhas respostas.");
+  }
+
   function add(type, text, save = false) {
     const d = document.createElement("div");
     d.className = "msg " + type;
@@ -476,7 +490,7 @@
   };
 
   $("#begin").onclick = () => {
-    prepareAudio();
+    enableVoice();
     const text =
       "Olá. Sou Mioko, Professora Virtual de Idiomas. " +
       "Podemos conversar sobre qualquer assunto e eu adapto " +
@@ -553,10 +567,19 @@
       if (generation === voiceGeneration) say(String(answer));
     } catch (e) {
       waiting.remove();
+      const limited = /429|rate.?limit|too many requests/i.test(e.message);
+      const quota = /insufficient_quota|exceeded your current quota/i.test(e.message);
+      const retry = e.message.match(/try again in ([0-9.hms ]+)/i)?.[1]?.trim();
       add("ai",
         e.name === "AbortError"
           ? "A resposta demorou demais. Tente enviar novamente."
-          : "❌ IA não conectou: " + e.message
+          : quota
+            ? "O serviço de IA informou falta de cota disponível. É necessário verificar a conta do serviço."
+            : limited
+              ? "A Mioko atingiu o limite temporário do serviço de IA. Aguarde " +
+                (retry || "alguns minutos") +
+                " antes de enviar outra pergunta. A resposta não foi gerada."
+              : "❌ IA não conectou: " + e.message
       );
     } finally {
       clearTimeout(timeout);
@@ -604,7 +627,7 @@
       add("ai",
         "Vídeo com a Mioko iniciado. Pode falar ou escrever."
       );
-      startListening();
+      greetCall();
     } catch (e) {
       stopMedia();
       add("ai",
@@ -640,7 +663,7 @@
     add("ai",
       "Chamada com a Mioko iniciada. Pode falar ou escrever."
     );
-    startListening();
+    greetCall();
   };
 
   $("#photo").onclick = () => $("#photoIn").click();
@@ -723,7 +746,7 @@
       return;
     }
     voiceInputBlocked = false;
-    prepareAudio();
+    enableVoice();
     if (listening) {
       stopListening();
       return;
