@@ -26,3 +26,10 @@ Backup anterior às mudanças: branch backup/pre-continuous-anime-20261008, comm
 - O navegador deve disponibilizar SpeechRecognition e uma voz no idioma desejado. Sem reconhecimento disponível, a interface informa a limitação e mantém texto; não há transcrição alternativa implantada para navegadores incompatíveis.
 - Boca no silêncio total e fim da fala é encerrada por eventos; sincronização fonética e pausas internas da voz nativa não estão garantidas.
 - Para liberar o resultado integral: autenticar o Supabase, implantar as funções somente no projeto autorizado, regularizar créditos/limites externos e concluir testes reais em computador e celular.
+
+## Verificação posterior à publicação
+- GitHub Pages publicou o commit 9c3496a57b3c6e2acbbe8092091b98ac746ebc8f com workflow concluído com sucesso.
+- Chrome real: atualização da página, entrada, anime exibida, crédito e sete idiomas confirmados.
+- Chamada de áudio REAL: il-voice novamente retornou 429 por ausência de créditos; a tentativa de fallback neste navegador de teste retornou synthesis-failed. Reconhecimento retornou not-allowed. Nenhuma conversa real por voz foi validada.
+- Encerramento da chamada confirmou estado encerrado. Chamada de vídeo REAL falhou com Requested device not found neste ambiente, que não disponibilizou câmera física.
+- A etapa de autenticação para implantar as funções não foi concluída. Nenhuma alteração administrativa no Supabase nem no faturamento do provedor foi realizada.
