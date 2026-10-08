@@ -1,7 +1,7 @@
 // IL TALK MIOKO — serviço de voz com alternativa do navegador.
 {
   const script = document.createElement("script");
-  script.src = "mioko-avatar.js";
+  script.src = "mioko-avatar.js?v=20261008";
   document.head.appendChild(script);
 }
 
@@ -10,6 +10,17 @@
   const config = () => window.IL_TALK_CONFIG || {};
 
   let lang = localStorage.ilLang || "Português";
+  const locales = { Português: "pt-BR", Japonês: "ja-JP", Inglês: "en-US", Espanhol: "es-ES", Francês: "fr-FR", Coreano: "ko-KR", Italiano: "it-IT" };
+  const locale = () => locales[lang] || "pt-BR";
+  const greetings = {
+    Português: "Olá! Sou a Mioko. O que você gostaria de conversar?",
+    Japonês: "こんにちは、ミオコです。何について話しましょうか？",
+    Inglês: "Hello! I'm Mioko. What would you like to talk about?",
+    Espanhol: "¡Hola! Soy Mioko. ¿De qué te gustaría hablar?",
+    Francês: "Bonjour ! Je suis Mioko. De quoi aimeriez-vous parler ?",
+    Coreano: "안녕하세요! 저는 미오코입니다. 어떤 이야기를 나누고 싶으세요?",
+    Italiano: "Ciao! Sono Mioko. Di cosa vorresti parlare?"
+  };
   let voice = localStorage.ilVoice !== "off";
   let history = [];
   try {
@@ -36,6 +47,9 @@
   let voiceRetryAfter = 0;
   let listenTimer = 0;
   let replyQueue = Promise.resolve();
+  let conversationGeneration = 0;
+  let replyController = null;
+  let recognitionFailures = 0;
 
   function voiceLabel() {
     $("#voice").textContent =
@@ -51,7 +65,7 @@
   }
 
   function greetCall() {
-    const greeting = "Olá! Sou a Mioko. Estou aqui para conversar com você. Como você está?";
+    const greeting = greetings[lang] || greetings.Português;
     add("ai", greeting, true);
     say(greeting);
     if (!SR) add("ai", "Este navegador não oferece reconhecimento de voz. Você pode continuar digitando e ouvir minhas respostas.");
@@ -172,6 +186,8 @@
 
   function stopMedia() {
     callMode = null;
+    conversationGeneration++;
+    replyController?.abort();
     stopListening();
     stopSpeech();
     if (stream) {
@@ -233,17 +249,11 @@
 
   function selectNativeVoice() {
     const voices = window.speechSynthesis.getVoices();
-    const brazilian = voices.filter(v =>
-      v.lang.replace("_", "-").toLowerCase() === "pt-br"
-    );
-    const portuguese = voices.filter(v =>
-      v.lang.toLowerCase().startsWith("pt")
-    );
-    const candidates = brazilian.length ? brazilian : portuguese;
-    return candidates.find(v =>
-      /female|feminina|maria|francisca|luciana|victoria|vitoria|vitória/i
-        .test(v.name)
-    ) || candidates[0] || null;
+    const code = locale().toLowerCase();
+    const exact = voices.filter(v => v.lang.replace("_", "-").toLowerCase() === code);
+    const compatible = voices.filter(v => v.lang.toLowerCase().split("-")[0] === code.split("-")[0]);
+    const candidates = exact.length ? exact : compatible;
+    return candidates.find(v => /female|feminina|maria|francisca|luciana|victoria|vitoria|vitória|samantha|zira|kyoko|haruka|nanami|yuna|heami|amelie|audrey|monica|paulina|elsa|isabella/i.test(v.name)) || candidates[0] || null;
   }
 
   async function waitForNativeVoices() {
@@ -273,7 +283,7 @@
 
     const u = new SpeechSynthesisUtterance(text);
     const selected = selectNativeVoice();
-    u.lang = "pt-BR";
+    u.lang = locale();
     u.rate = 1.05;
     u.pitch = 1;
     if (selected) {
@@ -329,6 +339,7 @@
           e.error + ". Toque em COMEÇAR AULA para tentar novamente."
         );
       }
+      resumeListening(600);
     };
 
     window.speechSynthesis.speak(u);
@@ -353,7 +364,12 @@
         signal: controller.signal,
         body: JSON.stringify({ text, language: lang })
       });
-      if (!r.ok) throw Error("Serviço de voz HTTP " + r.status);
+      if (!r.ok) {
+        const detail = await r.text();
+        const error = Error("Serviço de voz HTTP " + r.status + ": " + detail.slice(0,600));
+        error.status = r.status;
+        throw error;
+      }
       blob = await r.blob();
       if (!blob.size || !blob.type.startsWith("audio/")) {
         throw Error("O serviço não devolveu áudio válido");
@@ -416,20 +432,25 @@
     const generation = voiceGeneration;
     speechPending = true;
 
-    // Conversa ao vivo: use a voz nativa primeiro para começar a falar sem
-    // esperar a função remota de áudio. O serviço remoto fica fora do caminho
-    // crítico da conversa e não pode atrasar a resposta falada.
     try {
+      if (Date.now() >= voiceRetryAfter) {
+        try { await serviceSay(text, generation); return; }
+        catch (error) {
+          if (generation !== voiceGeneration) return;
+          releaseAudio();
+          // Circuit breaker applies only to the failed voice service, never to conversation.
+          voiceRetryAfter = Date.now() + 60000;
+          console.warn(error.message);
+          add("ai", "Voz principal indisponível: " + error.message + ". Usando a voz do navegador.");
+        }
+      }
       await nativeSay(text, generation);
-      return;
     } catch (e) {
       if (generation !== voiceGeneration) return;
       speechPending = false;
       closeMouth();
-      add("ai",
-        "Voz indisponível: " + e.message +
-        ". A conversa por texto continua disponível."
-      );
+      add("ai", "Voz indisponível: " + e.message + ". A conversa por texto continua disponível.");
+      resumeListening();
     }
   }
 
@@ -475,9 +496,12 @@
         x.classList.remove("sel")
       );
       b.classList.add("sel");
+      stopListening();
+      stopSpeech();
       lang = b.dataset.lang;
       localStorage.ilLang = lang;
       $("#status").textContent = lang + " • avaliação adaptativa";
+      resumeListening();
     };
   });
   $("#status").textContent = lang + " • avaliação adaptativa";
@@ -496,11 +520,7 @@
 
   $("#begin").onclick = () => {
     enableVoice();
-    const text =
-      "Olá. Sou Mioko, Professora Virtual de Idiomas. " +
-      "Podemos conversar sobre qualquer assunto e eu adapto " +
-      "o ensino de " + lang + " ao seu nível. " +
-      "O que você gostaria de conversar ou aprender?";
+    const text = greetings[lang] || greetings.Português;
     add("ai", text, true);
     say(text);
   };
@@ -522,13 +542,14 @@
     $("#text").value = "";
     stopListening();
     stopSpeech();
+    const conversation = conversationGeneration;
     replyQueue = replyQueue
       .catch(() => {})
-      .then(() => sendMessage(message));
+      .then(() => { if (conversation === conversationGeneration) return sendMessage(message, conversation); });
     return replyQueue;
   }
 
-  async function sendMessage(message) {
+  async function sendMessage(message, conversation) {
     replyPending = true;
     stopListening();
     const generation = voiceGeneration;
@@ -541,19 +562,22 @@
     }
     const waiting = add("ai", "🧠 Pensando...");
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000);
+    replyController = controller;
+    const requestLanguage = lang;
+    const timeout = setTimeout(() => controller.abort(), 45000);
     try {
       const r = await fetch(ep, {
         method: "POST",
         headers: headers(),
         signal: controller.signal,
         body: JSON.stringify({
-          message,
+          message: message + "\n\n[Idioma da resposta: " + lang + ". Use exclusivamente esse idioma, exceto traduções ou exemplos solicitados.]",
           language: lang,
-          history: history.slice(0, -1).slice(-10)
+          history: history.slice(0, -1).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
         })
       });
       const raw = await r.text();
+      if (conversation !== conversationGeneration) { waiting.remove(); return; }
       let data;
       try { data = JSON.parse(raw); }
       catch { throw Error("Resposta inválida do serviço de IA"); }
@@ -569,9 +593,10 @@
       if (!answer) throw Error("A função respondeu sem texto");
       waiting.remove();
       add("ai", String(answer), true);
-      if (generation === voiceGeneration) say(String(answer));
+      if (generation === voiceGeneration && requestLanguage === lang) say(String(answer));
     } catch (e) {
       waiting.remove();
+      if (conversation !== conversationGeneration) return;
       const limited = /429|rate.?limit|too many requests/i.test(e.message);
       const quota = /insufficient_quota|exceeded your current quota/i.test(e.message);
       const retry = e.message.match(/try again in ([0-9.hms ]+)/i)?.[1]?.trim();
@@ -588,6 +613,7 @@
       );
     } finally {
       clearTimeout(timeout);
+      if (replyController === controller) replyController = null;
       replyPending = false;
       if (!speechPending && !currentAudio && !nativeUtterance) {
         resumeListening(500);
@@ -614,10 +640,12 @@
     stopMedia();
     voiceInputBlocked = false;
     try {
+      const session = conversationGeneration;
       const opened = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true
       });
+      if (session !== conversationGeneration) { opened.getTracks().forEach(track => track.stop()); return; }
       stream = opened;
       callMode = "video";
       const v = $("#userVideo");
@@ -630,7 +658,7 @@
       $("#videoCall").textContent = "⏹ Encerrar vídeo";
       v.play().catch(() => {});
       add("ai",
-        "Vídeo com a Mioko iniciado. Pode falar ou escrever."
+        "Vídeo iniciado. A câmera mostra sua prévia; imagens não são enviadas à IA. Pode falar ou escrever."
       );
       greetCall();
     } catch (e) {
@@ -697,7 +725,7 @@
 
     const r = new SR();
     recognition = r;
-    r.lang = "pt-BR";
+    r.lang = locale();
     r.continuous = false;
     r.interimResults = false;
 
@@ -710,14 +738,15 @@
       if (recognition !== r) return;
       const spoken =
         e.results[e.results.length - 1][0].transcript.trim();
-      if (spoken) send(spoken);
+      if (spoken) recognitionFailures = 0;
+      if (spoken && !replyPending && !speechPending && !nativeUtterance && !currentAudio) send(spoken);
     };
     r.onend = () => {
       if (recognition !== r) return;
       recognition = null;
       listening = false;
       $("#mic").textContent = "🎙️ Microfone opcional";
-      resumeListening(250);
+      resumeListening(Math.min(10000, 250 * 2 ** recognitionFailures));
     };
     r.onerror = e => {
       if (recognition !== r) return;
@@ -726,6 +755,10 @@
         "not-allowed", "service-not-allowed", "audio-capture"
       ].includes(e.error)) {
         voiceInputBlocked = true;
+      }
+      if (!["no-speech", "aborted"].includes(e.error)) {
+        recognitionFailures++;
+        if (recognitionFailures >= 5) voiceInputBlocked = true;
       }
       $("#mic").textContent = "🎙️ Microfone opcional";
       if (!["no-speech", "aborted"].includes(e.error)) {
@@ -736,9 +769,12 @@
       }
     };
     try { r.start(); }
-    catch {
+    catch (e) {
       recognition = null;
       listening = false;
+      recognitionFailures++;
+      if (recognitionFailures <= 3) resumeListening(1000 * recognitionFailures);
+      else { voiceInputBlocked = true; add("ai", "Não consegui iniciar a escuta: " + e.message + ". Toque no microfone para tentar novamente."); }
     }
   }
 
@@ -764,5 +800,8 @@
     startListening();
   };
 
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && callMode && !voiceInputBlocked) resumeListening();
+  });
   window.addEventListener("pagehide", stopMedia);
 })();

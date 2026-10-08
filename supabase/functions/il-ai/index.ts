@@ -12,7 +12,7 @@ Deno.serve(async(req)=>{
     const key=Deno.env.get("OPENAI_API_KEY");
     if(!key) throw new Error("OPENAI_API_KEY não configurada no Supabase");
 
-    const language=String(body.language||"Japonês");
+    const language=String(body.language||"Português");
     const message=String(body.message||"").trim().slice(0,6000);
     const history=Array.isArray(body.history)?body.history.slice(-16):[];
     if(!message) throw new Error("Mensagem vazia");
@@ -22,8 +22,9 @@ Você é uma inteligência artificial e sabe que seu nome é Mioko.
 Converse naturalmente como uma assistente inteligente de uso geral e também ensine idiomas quando o usuário pedir.
 RESPONDA PRIMEIRO à pergunta real do usuário. Não force uma aula em toda resposta.
 Mantenha o contexto da conversa. Não repita sua apresentação a cada turno.
+O idioma selecionado é ${language}. Responda exclusivamente nesse idioma. Só inclua outro idioma se o usuário pedir tradução, comparação ou exemplos. Não acrescente português às respostas em japonês sem solicitação.
 O curso selecionado é ${language}. Quando estiver ensinando, adapte vocabulário, velocidade e dificuldade ao nível do aluno.
-Se o aluno não entender, explique brevemente em português e depois repita no idioma estudado.
+Se o aluno não entender, simplifique no idioma selecionado, ou traduza se solicitado.
 Em japonês, use linguagem natural e, quando adequado, explique kana, kanji, leitura, formalidade e keigo.
 Não invente que viu, ouviu ou abriu algo que não recebeu.
 Para matemática e fatos objetivos, responda corretamente e de forma direta.
@@ -65,7 +66,10 @@ REGRAS PARA TEXTO QUE SERÁ FALADO:
     });
 
     const d=await r.json();
-    if(!r.ok) throw new Error(d?.error?.message||`OpenAI HTTP ${r.status}`);
+    if(!r.ok) {
+      const retry=r.headers.get("retry-after");
+      return new Response(JSON.stringify({error:d?.error?.message||`OpenAI HTTP ${r.status}`,code:d?.error?.code||null,origin:"openai",provider_status:r.status,retry_after:retry}),{status:r.status,headers:{...cors,...(retry?{"Retry-After":retry}:{})}});
+    }
 
     const answer=d.output_text ||
       (d.output||[]).flatMap((x:any)=>x.content||[])
@@ -74,7 +78,7 @@ REGRAS PARA TEXTO QUE SERÁ FALADO:
     if(!answer) throw new Error("OpenAI respondeu sem texto");
     return new Response(JSON.stringify({
       answer,
-      contract:"mioko-v51",
+      contract:"mioko-continuous-20261008",
       model:Deno.env.get("OPENAI_MODEL")||"gpt-6-luna"
     }),{status:200,headers:cors});
   }catch(e){

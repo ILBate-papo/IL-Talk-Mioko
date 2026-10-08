@@ -14,7 +14,10 @@ Deno.serve(async(req)=>{
     const lang=String(language||"Português");
     const instructions=`Fale com voz feminina adulta, natural, acolhedora e didática. Pronuncie corretamente o idioma ${lang}. Em japonês, respeite a pronúncia japonesa nativa. Em português, use português brasileiro natural. Leia números pelo seu valor normal quando forem quantidades. Não verbalize símbolos de Markdown.`;
     const r=await fetch("https://api.openai.com/v1/audio/speech",{method:"POST",headers:{Authorization:`Bearer ${key}`,"Content-Type":"application/json"},body:JSON.stringify({model:Deno.env.get("OPENAI_TTS_MODEL")||"gpt-4o-mini-tts",voice:Deno.env.get("OPENAI_TTS_VOICE")||"coral",input,instructions,response_format:"mp3"})});
-    if(!r.ok) throw new Error(`OpenAI áudio HTTP ${r.status}: ${(await r.text()).slice(0,300)}`);
+    if(!r.ok) {
+      const d=await r.json(); const retry=r.headers.get("retry-after");
+      return new Response(JSON.stringify({error:d?.error?.message||`OpenAI áudio HTTP ${r.status}`,code:d?.error?.code||null,origin:"openai",provider_status:r.status}),{status:r.status,headers:{...cors,"Content-Type":"application/json",...(retry?{"Retry-After":retry}:{})}});
+    }
     return new Response(await r.arrayBuffer(),{status:200,headers:{...cors,"Content-Type":"audio/mpeg","Cache-Control":"no-store"}});
   }catch(e){return new Response(JSON.stringify({error:String(e?.message||e)}),{status:500,headers:{...cors,"Content-Type":"application/json"}})}
 });

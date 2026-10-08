@@ -789,3 +789,7 @@
 @media(max-width:760px){
   #miokoVideo .miokoVideoPortrait{height:clamp(230px,55vh,420px)}
 }
+
+/* Upright anime portrait: no whole-face pulsing or twisting. */
+#miokoVideo .miokoVideoPortrait { animation:none!important; transform:none!important; object-fit:contain; }
+.mioko-credit {display:block!important; color:#f5d29e; font-size:13px; margin:6px 0;}
