@@ -1,13 +1,17 @@
 const cors = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://ilbate-papo.github.io',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Content-Type': 'application/json',
+  'Cache-Control': 'no-store',
+  'Vary': 'Origin',
 };
 const json = (data: unknown, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers: { ...cors, ...headers } });
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
+  const origin = req.headers.get('origin');
+  if (origin && origin !== cors['Access-Control-Allow-Origin']) return json({error: 'Origem não autorizada'}, 403);
   try {
     const form = await req.formData();
     const file = form.get('file');
