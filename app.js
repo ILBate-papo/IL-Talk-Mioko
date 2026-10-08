@@ -274,7 +274,7 @@
     const u = new SpeechSynthesisUtterance(text);
     const selected = selectNativeVoice();
     u.lang = "pt-BR";
-    u.rate = 0.95;
+    u.rate = 1.05;
     u.pitch = 1;
     if (selected) {
       u.voice = selected;
@@ -416,19 +416,12 @@
     const generation = voiceGeneration;
     speechPending = true;
 
-    if (Date.now() >= voiceRetryAfter && config().VOICE_ENDPOINT) {
-      try {
-        await serviceSay(text, generation);
-        return;
-      } catch {
-        if (generation !== voiceGeneration) return;
-        releaseAudio();
-        voiceRetryAfter = Date.now() + 60000;
-      }
-    }
-
+    // Conversa ao vivo: use a voz nativa primeiro para começar a falar sem
+    // esperar a função remota de áudio. O serviço remoto fica fora do caminho
+    // crítico da conversa e não pode atrasar a resposta falada.
     try {
       await nativeSay(text, generation);
+      return;
     } catch (e) {
       if (generation !== voiceGeneration) return;
       speechPending = false;
@@ -724,7 +717,7 @@
       recognition = null;
       listening = false;
       $("#mic").textContent = "🎙️ Microfone opcional";
-      resumeListening(600);
+      resumeListening(250);
     };
     r.onerror = e => {
       if (recognition !== r) return;
