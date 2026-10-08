@@ -31,7 +31,7 @@
     lastDraw = now;
     ctx.clearRect(0, 0, photo.naturalWidth, photo.naturalHeight);
     ctx.drawImage(photo, 0, 0);
-    if (mouth > .01) deform(482, 397, -.40, 188, 116, 1 + mouth * .65);
+    if (mouth > .01) deform(482, 397, -.40, 205, 132, 1 + mouth * 1.15);
     if (now >= nextBlink && !blinkStart) blinkStart = now;
     if (blinkStart) {
       const t = (now - blinkStart) / 180;
