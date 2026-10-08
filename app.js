@@ -50,6 +50,11 @@
   let conversationGeneration = 0;
   let replyController = null;
   let recognitionFailures = 0;
+  let fallbackListener = null;
+  let fallbackOpening = false;
+  let listenGeneration = 0;
+  let transcriptionRequest = null;
+  let transcriptionPending = false;
 
   function voiceLabel() {
     $("#voice").textContent =
@@ -68,7 +73,7 @@
     const greeting = greetings[lang] || greetings.Português;
     add("ai", greeting, true);
     say(greeting);
-    if (!SR) add("ai", "Este navegador não oferece reconhecimento de voz. Você pode continuar digitando e ouvir minhas respostas.");
+
   }
 
   function add(type, text, save = false) {
@@ -115,6 +120,12 @@
   }
 
   function stopListening() {
+    listenGeneration++;
+    fallbackOpening = false;
+    fallbackListener?.stop();
+    transcriptionRequest?.abort();
+    transcriptionRequest = null;
+    transcriptionPending = false;
     clearTimeout(listenTimer);
     listening = false;
     const old = recognition;
@@ -606,9 +617,9 @@
           : quota
             ? "O serviço de IA informou falta de cota disponível. É necessário verificar a conta do serviço."
             : limited
-              ? "A Mioko atingiu o limite temporário do serviço de IA. Aguarde " +
+              ? "O provedor de IA bloqueou esta solicitação por limite de uso. Prazo informado pelo provedor: " +
                 (retry || "alguns minutos") +
-                " antes de enviar outra pergunta. A resposta não foi gerada."
+                ". Isso não é um cronômetro de aula. A resposta não foi gerada; é necessário verificar a cota e os limites da conta do serviço."
               : "❌ IA não conectou: " + e.message
       );
     } finally {
@@ -715,14 +726,74 @@
 
   const SR =
     window.SpeechRecognition || window.webkitSpeechRecognition;
+  let nativeRecognitionUnavailable = !SR;
+
+  async function startFallbackListening() {
+    const generation = listenGeneration;
+    const conversation = conversationGeneration;
+    fallbackOpening = true;
+    $("#mic").textContent = "🎙️ Abrindo microfone...";
+    try {
+      const module = await import("./mioko-listener.mjs?v=20261008-stt");
+      if (generation !== listenGeneration || conversation !== conversationGeneration || !callMode) return;
+      if (!fallbackListener) fallbackListener = module.createListener();
+      const started = await fallbackListener.start(blob => transcribeUtterance(blob, conversation));
+      if (generation !== listenGeneration || conversation !== conversationGeneration || !callMode) return;
+      listening = started;
+      $("#mic").textContent = started ? "🎙️ Ouvindo..." : "🎙️ Microfone opcional";
+    } catch (e) {
+      if (generation !== listenGeneration || conversation !== conversationGeneration) return;
+      listening = false;
+      voiceInputBlocked = true;
+      $("#mic").textContent = "🎙️ Microfone indisponível";
+      add("ai", "Não consegui ativar a escuta: " + e.message + ". Verifique a permissão do microfone neste site.");
+    } finally { if (generation === listenGeneration) fallbackOpening = false; }
+  }
+
+  async function transcribeUtterance(blob, conversation) {
+    if (!callMode || conversation !== conversationGeneration || replyPending || speechPending) return;
+    stopListening();
+    transcriptionPending = true;
+    $("#mic").textContent = "🎙️ Entendendo sua fala...";
+    const c = config();
+    const ep = c.TRANSCRIPTION_ENDPOINT || (c.SUPABASE_PROJECT_REF ? "https://" + c.SUPABASE_PROJECT_REF + ".supabase.co/functions/v1/il-transcribe" : "");
+    const controller = new AbortController();
+    transcriptionRequest = controller;
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    try {
+      if (!ep) throw Error("Serviço de transcrição não configurado");
+      const form = new FormData(); form.set("file", blob, "fala.wav"); form.set("language", lang);
+      const auth = headers(); delete auth["Content-Type"];
+      const response = await fetch(ep, { method: "POST", headers: auth, body: form, signal: controller.signal });
+      const data = await response.json();
+      if (conversation !== conversationGeneration || !callMode || controller.signal.aborted) return;
+      if (!response.ok) {
+        voiceInputBlocked = true;
+        throw Error(response.status === 404 ? "A função il-transcribe ainda precisa ser implantada no Supabase" : "Transcrição HTTP " + response.status + ": " + (data.error || data.message || "Falha"));
+      }
+      const text = String(data.text || "").trim();
+      if (transcriptionRequest === controller) transcriptionRequest = null;
+      transcriptionPending = false;
+      if (text) send(text); else resumeListening();
+    } catch (e) {
+      if (conversation !== conversationGeneration || !callMode || transcriptionRequest !== controller) return;
+      add("ai", e.name === "AbortError" ? "A transcrição demorou demais. Sua fala não foi convertida em texto; tente novamente." : "Não consegui entender o áudio: " + e.message);
+      $("#mic").textContent = "🎙️ Escuta interrompida";
+    } finally {
+      clearTimeout(timeout);
+      if (transcriptionRequest === controller) { transcriptionRequest = null; transcriptionPending = false; }
+      if (!voiceInputBlocked && !replyPending && !speechPending) resumeListening();
+    }
+  }
 
   function startListening() {
     if (
-      !callMode || !SR || recognition || listening ||
+      !callMode || recognition || listening || fallbackOpening || transcriptionPending ||
       currentAudio || nativeUtterance || speechPending ||
       replyPending || voiceInputBlocked
     ) return;
 
+    if (nativeRecognitionUnavailable) { startFallbackListening(); return; }
     const r = new SR();
     recognition = r;
     r.lang = locale();
@@ -751,8 +822,14 @@
     r.onerror = e => {
       if (recognition !== r) return;
       listening = false;
+      if (e.error === "service-not-allowed" || (e.error === "network" && recognitionFailures >= 1)) {
+        nativeRecognitionUnavailable = true;
+        stopListening();
+        resumeListening(500);
+        return;
+      }
       if ([
-        "not-allowed", "service-not-allowed", "audio-capture"
+        "not-allowed", "audio-capture"
       ].includes(e.error)) {
         voiceInputBlocked = true;
       }
@@ -779,13 +856,6 @@
   }
 
   $("#mic").onclick = () => {
-    if (!SR) {
-      alert(
-        "Este navegador não oferece reconhecimento de voz. " +
-        "Você pode escrever para a Mioko."
-      );
-      return;
-    }
     voiceInputBlocked = false;
     enableVoice();
     if (listening) {
