@@ -9,7 +9,7 @@
   const $ = s => document.querySelector(s);
   const config = () => window.IL_TALK_CONFIG || {};
 
-  let lang = localStorage.ilLang || "Japonês";
+  let lang = localStorage.ilLang || "Português";
   let voice = localStorage.ilVoice !== "off";
   let history = [];
   try {
@@ -548,7 +548,7 @@
     }
     const waiting = add("ai", "🧠 Pensando...");
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 45000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
     try {
       const r = await fetch(ep, {
         method: "POST",
@@ -557,7 +557,7 @@
         body: JSON.stringify({
           message,
           language: lang,
-          history: history.slice(0, -1).slice(-16)
+          history: history.slice(0, -1).slice(-10)
         })
       });
       const raw = await r.text();
