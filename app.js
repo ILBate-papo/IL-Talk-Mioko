@@ -1,7 +1,7 @@
 // IL TALK MIOKO — serviço de voz com alternativa do navegador.
 {
   const script = document.createElement("script");
-  script.src = "mioko-avatar.js?v=20261009-voz2";
+  script.src = "mioko-avatar.js?v=20261009-voz3";
   document.head.appendChild(script);
 }
 
@@ -12,6 +12,8 @@
   let lang = localStorage.ilLang || "Português";
   const locales = { Português: "pt-BR", Japonês: "ja-JP", Inglês: "en-US", Espanhol: "es-ES", Francês: "fr-FR", Coreano: "ko-KR", Italiano: "it-IT" };
   const locale = () => locales[lang] || "pt-BR";
+  // The response language and the student's spoken language are independent.
+  const inputLocale = () => config().MIC_LANGUAGE || "pt-BR";
   const greetings = {
     Português: "Olá! Sou a Mioko. O que você gostaria de conversar?",
     Japonês: "こんにちは、ミオコです。何について話しましょうか？",
@@ -362,8 +364,11 @@
               } else {
                 $("#miokoVideo").classList.add("speaking");
                 const phase = (now - started) / 1000;
-                // Native speech exposes no audio samples. Animate only brief real speech boundaries.
-                window.MiokoAvatar?.setMouth(now < boundaryUntil ? Math.abs(Math.sin(phase * 13)) * 0.8 : 0);
+                // Android often omits boundary events. This is an estimated articulation
+                // while synthesis is active; onend/cancel still close the mouth immediately.
+                const syllable = Math.abs(Math.sin(phase * 12.5));
+                const opening = 0.12 + syllable * 0.78;
+                window.MiokoAvatar?.setMouth(opening);
               }
               audioFrame = requestAnimationFrame(tick);
             }
@@ -546,8 +551,26 @@
     }
   };
 
-  $("#begin").onclick = () => {
+  $("#begin").onclick = async () => {
     enableVoice();
+    voiceInputBlocked = false;
+    micPaused = false;
+    recognitionFailures = 0;
+    if (!callMode) {
+      callMode = "voice";
+      $("#miokoVideo").classList.add("calling");
+      $("#voiceCall").textContent = "⏹ Encerrar chamada";
+    }
+    const session = conversationGeneration;
+    try {
+      const permission = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+      permission.getTracks().forEach(track => track.stop());
+    } catch (e) {
+      if (session !== conversationGeneration) return;
+      voiceInputBlocked = true;
+      add("ai", "Permita o microfone para conversar por voz. Toque no botão do microfone para tentar novamente.");
+    }
+    if (session !== conversationGeneration) return;
     const text = greetings[lang] || greetings.Português;
     add("ai", text, true);
     say(text);
@@ -799,7 +822,7 @@
           const form = new FormData();
           const type=rec.mimeType || "audio/webm";
           form.append("file",new Blob(chunks,{type}),type.includes("mp4")?"fala.mp4":type.includes("ogg")?"fala.ogg":"fala.webm");
-          form.append("language",locale().split("-")[0]);
+          form.append("language",inputLocale().split("-")[0]);
           const h=headers(); delete h["Content-Type"];
           const response=await fetch(config().VOICE_ENDPOINT,{method:"POST",headers:h,body:form,signal:AbortSignal.timeout(30000)});
           const data=await response.json();
@@ -842,7 +865,7 @@
     if (!SR || useRecorder) { startRecordedListening(); return; }
     const r = new SR();
     recognition = r;
-    r.lang = locale();
+    r.lang = inputLocale();
     r.continuous = false;
     r.interimResults = true;
     r.maxAlternatives = 1;
@@ -850,7 +873,7 @@
     r.onstart = () => {
       if (recognition !== r) return;
       listening = true;
-      $("#mic").textContent = "🎙️ Ouvindo...";
+      $("#mic").textContent = "🎙️ Ouvindo sua voz em português...";
     };
     r.onresult = e => {
       if (recognition !== r) return;
