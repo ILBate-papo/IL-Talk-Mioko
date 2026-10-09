@@ -43,7 +43,7 @@
   photo.onload=()=>{canvas.width=512;canvas.height=768;ctx.setTransform(.5,0,0,.5,0,0);portrait.replaceWith(canvas);frame=requestAnimationFrame(draw);};
   photo.src=portrait.src;
   window.MiokoAvatar={
-    setMouth(value){lastMouthUpdate=performance.now();mouth=Math.max(0,Math.min(1,Number(value)||0));canvas.dataset.mouth=String(mouth);},
+    setMouth(value, immediate = false){lastMouthUpdate=performance.now();mouth=Math.max(0,Math.min(1,Number(value)||0));canvas.dataset.mouth=String(mouth);if(immediate)draw(lastMouthUpdate,true);},
     closeMouth(){mouth=0;canvas.dataset.mouth='0';draw(performance.now(),true);}
   };
   window.addEventListener('pagehide',()=>{mouth=0;cancelAnimationFrame(frame);});
