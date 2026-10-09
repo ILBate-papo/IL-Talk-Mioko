@@ -37,6 +37,7 @@
     access=await request('/functions/v1/il-access',{},t);
     if(!access.allowed)throw Error(access.reason||'Acesso não liberado.');
     accessChecked=Date.now();
+    window.dispatchEvent(new CustomEvent('mioko-auth',{detail:{role:access.role}}));
     document.querySelectorAll('[data-mode="Administração"],[data-mode="Professor"]').forEach(b=>{b.hidden=access.role!=='admin';});
     return access;
   }
@@ -44,7 +45,7 @@
     const email=document.querySelector('#email').value.trim().toLowerCase();
     const password=document.querySelector('#pass').value;
     if(!email||!password){tell('Informe seu e-mail e senha.');return false;}
-    access=null;accessChecked=0;enter.disabled=true;tell('Conferindo seu acesso…');
+    session=null;save();access=null;accessChecked=0;enter.disabled=true;tell('Conferindo seu acesso…');
     try {
       const d=await request('/auth/v1/token?grant_type=password',{email,password});
       session={...d,expires_at:Math.floor(Date.now()/1000)+d.expires_in};save();
@@ -69,7 +70,8 @@
     if(old?.access_token)fetch(base+'/auth/v1/logout',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+old.access_token},signal:AbortSignal.timeout(10000)}).catch(()=>{});
     tell('Sessão encerrada.');
   }
-  window.MiokoAuth={signIn,signOut,getToken:token,userId:()=>access?.user_id || "",hasAccess:()=>!!access?.allowed,requireAccess:async()=>{if(!access?.allowed||Date.now()-accessChecked>60000)await verify();return token();}};
+  window.MiokoAuth={signIn,signOut,getToken:token,userId:()=>access?.user_id || "",hasAccess:()=>!!access?.allowed,role:()=>access?.role||'',requireAccess:async()=>{if(!access?.allowed||Date.now()-accessChecked>60000)await verify();return token();}};
   // Always show the login screen; a stored session alone never opens the course.
   document.querySelector('#app').classList.add('hide');document.querySelector('#login').classList.remove('hide');
 })();
+

@@ -1,3 +1,8 @@
+// Payment, leads and access statistics for IL Talk Mioko.
+{
+ const script=document.createElement("script");script.src="business.js?v=20261009-1";document.head.appendChild(script);
+ const style=document.createElement("link");style.rel="stylesheet";style.href="business.css?v=20261009-1";document.head.appendChild(style);
+}
 // Download the signed Android app from the public login page.
 {
   const installScript = document.createElement("script");
@@ -7,7 +12,7 @@
 // Load access controls before allowing any course entry.
 {
   const authScript = document.createElement("script");
-  authScript.src = "auth.js?v=20261009-acesso1";
+  authScript.src = "auth.js?v=20261009-negocio1";
   document.head.appendChild(authScript);
   const authStyle = document.createElement("link");
   authStyle.rel = "stylesheet";
@@ -996,5 +1001,6 @@
   });
   window.addEventListener("pagehide", stopMedia);
 })();
+
 
 
