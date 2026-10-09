@@ -1,6 +1,6 @@
 # Cobrança e painel do IL Talk Mioko
 
-O plano inicial cobra R$ 140 por 30 dias. Dados de recebimento são configurados no painel autenticado `admin.html`. O Pix usa a chave, favorecido e banco informados pelo administrador. Um link público oficial do Mercado Pago pode ser salvo no painel.
+O plano inicial cobra R$ 100 por 30 dias. Dados de recebimento são configurados no painel autenticado `admin.html`. O Pix usa a chave, favorecido e banco informados pelo administrador. Um link público oficial do Mercado Pago pode ser salvo no painel.
 
 Pagamentos são conferidos manualmente pelo administrador no aplicativo do banco ou Mercado Pago. Informar uma transação como cliente apenas cria uma solicitação; não libera acesso. A confirmação autorizada registra recebimento e assinatura em uma única transação no banco. A referência é única para impedir duplicação do prazo. Não há integração bancária, webhook ou validação automática do pagamento nesta versão.
 

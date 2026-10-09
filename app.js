@@ -1,6 +1,6 @@
 // Payment, leads and access statistics for IL Talk Mioko.
 {
- const script=document.createElement("script");script.src="business.js?v=20261009-1";document.head.appendChild(script);
+ const script=document.createElement("script");script.src="business.js?v=20261009-preco100";document.head.appendChild(script);
  const style=document.createElement("link");style.rel="stylesheet";style.href="business.css?v=20261009-1";document.head.appendChild(style);
 }
 // Download the signed Android app from the public login page.
@@ -33,8 +33,13 @@
   let lang = localStorage.ilLang || "Português";
   const locales = { Português: "pt-BR", Japonês: "ja-JP", Inglês: "en-US", Espanhol: "es-ES", Francês: "fr-FR", Coreano: "ko-KR", Italiano: "it-IT" };
   const locale = () => locales[lang] || "pt-BR";
-  // Recognize speech in the language selected for this conversation.
-  const inputLocale = () => locale();
+  let beginnerSupport = localStorage.ilBeginnerSupport !== "off";
+  const beginnerLesson = () => lang !== "Português" && !!locales[lang] && beginnerSupport;
+  const inputLocale = () => beginnerLesson() ? "pt-BR" : locale();
+  const spokenLocale = () => beginnerLesson() ? "pt-BR" : locale();
+  const greetingForLesson = () => beginnerLesson()
+    ? (lang === "Japonês" ? "Olá! Vamos aprender japonês do zero. Vou explicar em português e pronunciar os exemplos em japonês. こんにちは。 Isso significa olá." : "Olá! Vamos aprender " + lang.toLowerCase() + " do zero. Vou explicar em português e usar a voz desse idioma nos exemplos.")
+    : (greetings[lang] || greetings.Português);
   const greetings = {
     Português: "Olá! Sou a Mioko. O que você gostaria de conversar?",
     Japonês: "こんにちは、ミオコです。何について話しましょうか？",
@@ -99,7 +104,7 @@
   }
 
   function greetCall() {
-    const greeting = greetings[lang] || greetings.Português;
+    const greeting = greetingForLesson();
     add("ai", greeting, true);
     say(greeting);
     
@@ -130,6 +135,7 @@
 
   function cleanSpeech(text) {
     return String(text)
+      .replace(/^\s*(?:Leitura|Romanização|Romaji)\s*:[^\n]*$/gim, " ")
       .replace(/[*#_`~]+/g, " ")
       .replace(/https?:\/\/\S+/g, " ")
       .replace(/\s+/g, " ")
@@ -290,9 +296,9 @@
     tick();
   }
 
-  function selectNativeVoice() {
+  function selectNativeVoice(requestedLocale = spokenLocale()) {
     const voices = window.speechSynthesis.getVoices();
-    const code = locale().toLowerCase();
+    const code = requestedLocale.toLowerCase();
     const exact = voices.filter(v => v.lang.replace("_", "-").toLowerCase() === code);
     const compatible = voices.filter(v => v.lang.toLowerCase().split("-")[0] === code.split("-")[0]);
     const candidates = exact.length ? exact : compatible;
@@ -329,21 +335,52 @@
     return chunks;
   }
 
-  async function nativeSay(text, generation) {
+  // Speech plan: keep Japanese script on a Japanese voice inside Portuguese explanations.
+  function speechSegments(text, defaultLocale) {
+    if (!["pt-BR", "ja-JP"].includes(defaultLocale)) return [{text, locale: defaultLocale}];
+    const pattern = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}ー][\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}ー\s。、！？「」『』（）・…0-9０-９]*/gu;
+    const parts = []; let position = 0;
+    for (const match of text.matchAll(pattern)) {
+      const before = text.slice(position, match.index).trim();
+      if (before) parts.push({text: before, locale: defaultLocale});
+      parts.push({text: match[0].trim(), locale: "ja-JP"});
+      position = match.index + match[0].length;
+    }
+    const after = text.slice(position).trim();
+    if (after) parts.push({text: after, locale: defaultLocale});
+    return parts;
+  }
+  // End speech plan.
+
+  async function nativeSay(text, generation, segments = null) {
     if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance === "undefined") {
       throw Error("O navegador não oferece voz alternativa");
     }
     await waitForNativeVoices();
     const synth = window.speechSynthesis;
-    const selected = selectNativeVoice();
-    if (!selected) throw Error("Este aparelho não tem voz de " + lang + ". Instale a voz desse idioma nas configurações de fala do aparelho ou teste no Chrome/Edge com essa voz disponível.");
+    const validLocales = new Set(Object.values(locales));
+    const parts = segments
+      ? segments.map(part => {
+          if (!validLocales.has(part.locale) || typeof part.text !== "string") throw Error("Idioma da fala não reconhecido.");
+          return {text: cleanSpeech(part.text), locale: part.locale};
+        }).filter(part => part.text)
+      : speechSegments(text, spokenLocale());
+    const chunks = parts.flatMap(part => speechChunks(part.text).map(text => ({text, locale: part.locale})));
+    const selectedVoices = new Map();
+    for (const part of parts) {
+      const selected = selectNativeVoice(part.locale);
+      if (!selected) throw Error("Este aparelho não tem voz de " + part.locale + ". Instale a voz desse idioma nas configurações de fala do aparelho para ouvir a pronúncia correta.");
+      selectedVoices.set(part.locale, selected);
+    }
     try {
-      for (const chunk of speechChunks(text)) {
+      for (const part of chunks) {
+        const chunk = part.text;
+        const selected = selectedVoices.get(part.locale);
         if (generation !== voiceGeneration || !voice) return;
         await new Promise((resolve, reject) => {
           const u = new SpeechSynthesisUtterance(chunk);
-          u.lang = selected?.lang || locale();
-          u.rate = 1.05;
+          u.lang = selected.lang;
+          u.rate = part.locale !== "pt-BR" && spokenLocale() === "pt-BR" ? 0.85 : 1.05;
           u.pitch = 1;
           if (selected) u.voice = selected;
           nativeUtterance = u;
@@ -499,7 +536,7 @@
     if (generation !== voiceGeneration) a.pause();
   }
 
-  async function say(value) {
+  async function say(value, segments = null) {
     if (!voice) return;
     const text = cleanSpeech(value);
     if (!text) return;
@@ -509,7 +546,7 @@
     speechPending = true;
 
     try {
-      await nativeSay(text, generation);
+      await nativeSay(text, generation, segments);
     } catch (e) {
       if (generation !== voiceGeneration) return;
       speechPending = false;
@@ -556,8 +593,29 @@
   if (lang === "Outro") {
     lang = "Italiano";
     localStorage.ilLang = lang;
-    $("#status").textContent = lang + " • avaliação adaptativa";
   }
+
+  const beginnerBox = document.createElement("label");
+  const beginnerText = document.createTextNode("");
+  beginnerBox.style.cssText = "display:block;margin:10px 0;font-size:14px";
+  const beginnerToggle = document.createElement("input");
+  beginnerToggle.type = "checkbox"; beginnerToggle.checked = beginnerSupport;
+  beginnerToggle.style.marginRight = "8px";
+  beginnerBox.append(beginnerToggle, beginnerText);
+  $("#status").insertAdjacentElement("afterend", beginnerBox);
+  const updateLessonMode = () => {
+    beginnerBox.hidden = lang === "Português";
+    beginnerText.textContent = lang + " para iniciantes: explicar e escutar em português";
+    $("#status").textContent = beginnerLesson() ? lang + " • iniciante • explicações em português" : lang + " • avaliação adaptativa";
+  };
+  beginnerToggle.onchange = () => {
+    stopListening(); stopSpeech();
+    replyController?.abort(); conversationGeneration++; replyPending = false;
+    beginnerSupport = beginnerToggle.checked;
+    localStorage.ilBeginnerSupport = beginnerSupport ? "on" : "off";
+    recognitionFailures = 0; voiceInputBlocked = false;
+    updateLessonMode(); resumeListening();
+  };
 
   document.querySelectorAll("[data-lang]").forEach(b => {
     b.classList.toggle("sel", b.dataset.lang === lang);
@@ -573,11 +631,11 @@
       voiceInputBlocked = false;
       useRecorder = preferRecorder;
       localStorage.ilLang = lang;
-      $("#status").textContent = lang + " • avaliação adaptativa";
+      updateLessonMode();
       resumeListening();
     };
   });
-  $("#status").textContent = lang + " • avaliação adaptativa";
+  updateLessonMode();
 
   $("#voice").onclick = () => {
     voice = !voice;
@@ -611,7 +669,7 @@
       add("ai", "Permita o microfone para conversar por voz. Toque no botão do microfone para tentar novamente.");
     }
     if (session !== conversationGeneration) return;
-    const text = greetings[lang] || greetings.Português;
+    const text = greetingForLesson();
     add("ai", text, true);
     say(text);
   };
@@ -662,7 +720,9 @@
         headers: await headers(),
         signal: controller.signal,
         body: JSON.stringify({
-          message: message + "\n\n[Idioma da resposta: " + lang + ". Use exclusivamente esse idioma, exceto traduções ou exemplos solicitados. Converse sobre o assunto pedido; não imponha uma aula. Adapte explicações e vocabulário ao nível solicitado, do básico ao avançado." + (callMode ? " Esta é uma conversa por voz: responda em turnos curtos e naturais, sem listas longas, e mantenha o contexto." : "") + "]",
+          message,
+          teaching_mode: beginnerLesson() ? "foreign_beginner_pt" : "conversation",
+          voice_conversation: !!callMode,
           language: lang,
           history: history.slice(0, -1).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
         })
@@ -684,7 +744,7 @@
       if (!answer) throw Error("A função respondeu sem texto");
       waiting.remove();
       add("ai", String(answer), true);
-      if (generation === voiceGeneration && requestLanguage === lang) say(String(answer));
+      if (generation === voiceGeneration && requestLanguage === lang) say(String(answer), data.speech_segments || null);
     } catch (e) {
       waiting.remove();
       if (conversation !== conversationGeneration) return;
@@ -877,7 +937,7 @@
         }
       };
       rec.start();
-      $("#mic").textContent="🎙️ Ouvindo sua voz em " + lang.toLowerCase() + "... fale e faça uma pausa";
+      $("#mic").textContent="🎙️ Ouvindo sua voz em " + (inputLocale() === "pt-BR" ? "português" : lang.toLowerCase()) + "... fale e faça uma pausa";
       timer=setInterval(() => {
         if(token !== recordingGeneration) { cleanup(); return; }
         meter.getFloatTimeDomainData(samples);
@@ -913,7 +973,7 @@
     r.onstart = () => {
       if (recognition !== r) return;
       listening = true;
-      $("#mic").textContent = "🎙️ Ouvindo sua voz em " + lang.toLowerCase() + "...";
+      $("#mic").textContent = "🎙️ Ouvindo sua voz em " + (inputLocale() === "pt-BR" ? "português" : lang.toLowerCase()) + "...";
     };
     r.onresult = e => {
       if (recognition !== r) return;

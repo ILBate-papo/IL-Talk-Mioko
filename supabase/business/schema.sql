@@ -1,6 +1,6 @@
 begin;
 create table public.mioko_billing_settings (
-  id boolean primary key default true check(id), price_cents integer not null default 14000 check(price_cents between 100 and 10000000),
+  id boolean primary key default true check(id), price_cents integer not null default 10000 check(price_cents between 100 and 10000000),
   access_days integer not null default 30 check(access_days between 1 and 366),
   pix_key text not null default '', pix_owner text not null default '', pix_bank text not null default '',
   mercado_pago_url text not null default '', updated_at timestamptz not null default now()
