@@ -1,3 +1,4 @@
+import {checkAccess} from "../_shared/access.ts";
 // Somente lxjbpklzrhylmlyepdkc. il-ai permanece intacta.
 const cors = {
   'Access-Control-Allow-Origin': 'https://ilbate-papo.github.io',
@@ -21,6 +22,8 @@ export async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') return fail('Use POST', 405, 'request');
   const origin = req.headers.get('origin');
   if (origin && origin !== cors['Access-Control-Allow-Origin']) return fail('Origem não autorizada', 403, 'request');
+  const access = await checkAccess(req);
+  if (!access.allowed) return json({error: access.reason}, access.status);
   try {
     key = Deno.env.get('GROQ_API_KEY') || '';
     if (!key) return fail('GROQ_API_KEY não configurada', 503, 'configuration');
