@@ -1,3 +1,13 @@
+// Load access controls before allowing any course entry.
+{
+  const authScript = document.createElement("script");
+  authScript.src = "auth.js?v=20261009-acesso1";
+  document.head.appendChild(authScript);
+  const authStyle = document.createElement("link");
+  authStyle.rel = "stylesheet";
+  authStyle.href = "auth.css?v=20261009-acesso1";
+  document.head.appendChild(authStyle);
+}
 // IL TALK MIOKO — serviço de voz com alternativa do navegador.
 {
   const script = document.createElement("script");
@@ -25,10 +35,15 @@
   };
   let voice = localStorage.ilVoice !== "off";
   let history = [];
+  let historyKey = "";
+  function loadUserHistory() {
+  history = [];
+  historyKey = "ilMiokoHistory:" + window.MiokoAuth.userId();
   try {
-    const saved = JSON.parse(localStorage.ilHistory || "[]");
+    const saved = JSON.parse(localStorage.getItem(historyKey) || "[]");
     if (Array.isArray(saved)) history = saved;
   } catch {}
+  }
 
   let stream = null;
   let callMode = null;
@@ -56,7 +71,8 @@
   let recognitionFailures = 0;
   let recorderStop = null;
   let recordingGeneration = 0;
-  let useRecorder = false;
+  const preferRecorder = /Android/i.test(navigator.userAgent || "") && !window.MiokoNativeSpeech;
+  let useRecorder = preferRecorder;
 
   function voiceLabel() {
     $("#voice").textContent =
@@ -95,7 +111,7 @@
       });
       history = history.slice(-30);
       try {
-        localStorage.ilHistory = JSON.stringify(history);
+        if (historyKey) localStorage.setItem(historyKey, JSON.stringify(history));
       } catch {}
     }
     return d;
@@ -109,7 +125,7 @@
       .trim();
   }
 
-  function headers() {
+  async function headers() {
     const c = config();
     const result = { "Content-Type": "application/json" };
     if (c.SUPABASE_PUBLISHABLE_KEY) {
@@ -118,6 +134,9 @@
       result.apikey = c.SUPABASE_ANON_KEY;
       result.Authorization = "Bearer " + c.SUPABASE_ANON_KEY;
     }
+    const token = await window.MiokoAuth?.requireAccess();
+    if (!token) throw Error("Entre com seu e-mail e senha.");
+    result.Authorization = "Bearer " + token;
     return result;
   }
 
@@ -406,7 +425,7 @@
     try {
       const r = await fetch(c.VOICE_ENDPOINT, {
         method: "POST",
-        headers: headers(),
+        headers: await headers(),
         signal: controller.signal,
         body: JSON.stringify({ text, language: lang })
       });
@@ -489,7 +508,9 @@
     }
   }
 
-  $("#enter").onclick = () => {
+  $("#enter").onclick = async () => {
+    if (!await window.MiokoAuth?.signIn()) return;
+    loadUserHistory();
     $("#login").classList.add("hide");
     $("#app").classList.remove("hide");
     prepareAudio();
@@ -497,6 +518,9 @@
 
   $("#exitCourse").onclick = () => {
     stopMedia();
+    window.MiokoAuth?.signOut();
+    history = []; historyKey = "";
+    $("#chat").replaceChildren();
     $("#app").classList.add("hide");
     $("#login").classList.remove("hide");
     $("#pass").value = "";
@@ -536,7 +560,7 @@
       lang = b.dataset.lang;
       recognitionFailures = 0;
       voiceInputBlocked = false;
-      useRecorder = false;
+      useRecorder = preferRecorder;
       localStorage.ilLang = lang;
       $("#status").textContent = lang + " • avaliação adaptativa";
       resumeListening();
@@ -624,7 +648,7 @@
     try {
       const r = await fetch(ep, {
         method: "POST",
-        headers: headers(),
+        headers: await headers(),
         signal: controller.signal,
         body: JSON.stringify({
           message: message + "\n\n[Idioma da resposta: " + lang + ". Use exclusivamente esse idioma, exceto traduções ou exemplos solicitados. Converse sobre o assunto pedido; não imponha uma aula. Adapte explicações e vocabulário ao nível solicitado, do básico ao avançado." + (callMode ? " Esta é uma conversa por voz: responda em turnos curtos e naturais, sem listas longas, e mantenha o contexto." : "") + "]",
@@ -828,13 +852,13 @@
           const type=rec.mimeType || "audio/webm";
           form.append("file",new Blob(chunks,{type}),type.includes("mp4")?"fala.mp4":type.includes("ogg")?"fala.ogg":"fala.webm");
           form.append("language",inputLocale().split("-")[0]);
-          const h=headers(); delete h["Content-Type"];
+          const h=await headers(); delete h["Content-Type"];
           const response=await fetch(config().VOICE_ENDPOINT,{method:"POST",headers:h,body:form,signal:AbortSignal.timeout(30000)});
           const data=await response.json();
           if(token !== recordingGeneration) return;
           if(!response.ok) throw Error(data.error || "Falha ao entender a fala");
           listening=false;
-          if(data.text?.trim()) send(data.text); else resumeListening();
+          if(data.text?.trim()) send(data.text); else { $("#mic").textContent="🎙️ Não entendi. Fale novamente e faça uma pausa."; resumeListening(1000); }
         } catch(e) {
           if(token !== recordingGeneration) return;
           listening=false; voiceInputBlocked=true;
@@ -842,13 +866,13 @@
         }
       };
       rec.start();
-      $("#mic").textContent="🎙️ Ouvindo... fale e faça uma pausa";
+      $("#mic").textContent="🎙️ Ouvindo sua voz em " + lang.toLowerCase() + "... fale e faça uma pausa";
       timer=setInterval(() => {
         if(token !== recordingGeneration) { cleanup(); return; }
         meter.getFloatTimeDomainData(samples);
         const rms=Math.sqrt(samples.reduce((sum,v)=>sum+v*v,0)/samples.length);
         const now=performance.now();
-        if(rms>0.018) { heard=true; quietSince=0; }
+        if(rms>0.008) { heard=true; quietSince=0; }
         else if(heard) { if(!quietSince) quietSince=now; if(now-quietSince>1000) finish(); }
         if(now-began>20000) finish();
       },100);
@@ -862,7 +886,7 @@
 
   function startListening() {
     if (
-      !callMode || recognition || listening ||
+      !window.MiokoAuth?.hasAccess() || !callMode || recognition || listening ||
       currentAudio || nativeUtterance || speechPending ||
       replyPending || voiceInputBlocked || micPaused
     ) return;
