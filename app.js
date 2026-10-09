@@ -12,8 +12,8 @@
   let lang = localStorage.ilLang || "Português";
   const locales = { Português: "pt-BR", Japonês: "ja-JP", Inglês: "en-US", Espanhol: "es-ES", Francês: "fr-FR", Coreano: "ko-KR", Italiano: "it-IT" };
   const locale = () => locales[lang] || "pt-BR";
-  // The response language and the student's spoken language are independent.
-  const inputLocale = () => config().MIC_LANGUAGE || "pt-BR";
+  // Recognize speech in the language selected for this conversation.
+  const inputLocale = () => locale();
   const greetings = {
     Português: "Olá! Sou a Mioko. O que você gostaria de conversar?",
     Japonês: "こんにちは、ミオコです。何について話しましょうか？",
@@ -534,6 +534,9 @@
       stopListening();
       stopSpeech();
       lang = b.dataset.lang;
+      recognitionFailures = 0;
+      voiceInputBlocked = false;
+      useRecorder = false;
       localStorage.ilLang = lang;
       $("#status").textContent = lang + " • avaliação adaptativa";
       resumeListening();
@@ -875,7 +878,7 @@
     r.onstart = () => {
       if (recognition !== r) return;
       listening = true;
-      $("#mic").textContent = "🎙️ Ouvindo sua voz em português...";
+      $("#mic").textContent = "🎙️ Ouvindo sua voz em " + lang.toLowerCase() + "...";
     };
     r.onresult = e => {
       if (recognition !== r) return;
