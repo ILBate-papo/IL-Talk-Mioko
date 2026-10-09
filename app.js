@@ -1,7 +1,7 @@
 // IL TALK MIOKO — serviço de voz com alternativa do navegador.
 {
   const script = document.createElement("script");
-  script.src = "mioko-avatar.js?v=20261008";
+  script.src = "mioko-avatar.js?v=20261009-voz2";
   document.head.appendChild(script);
 }
 
@@ -38,6 +38,7 @@
   let speechPending = false;
   let currentAudio = null;
   let nativeUtterance = null;
+  let nativeCancel = null;
   let audioContext = null;
   let analyser = null;
   let audioFrame = 0;
@@ -175,6 +176,8 @@
     voiceRequest?.abort();
     voiceRequest = null;
     speechPending = false;
+    nativeCancel?.();
+    nativeCancel = null;
     if (nativeUtterance) {
       nativeUtterance.onstart = null;
       nativeUtterance.onend = null;
@@ -273,78 +276,99 @@
     });
   }
 
+  function speechChunks(text) {
+    // Short utterances keep mobile speech engines from holding one long response.
+    const chunks = [];
+    let remaining = text.trim();
+    while (remaining.length > 240) {
+      const portion = remaining.slice(0, 240);
+      let cut = Math.max(portion.lastIndexOf(". "), portion.lastIndexOf("? "), portion.lastIndexOf("! "), portion.lastIndexOf("。"), portion.lastIndexOf("？"), portion.lastIndexOf("！"));
+      cut = cut >= 60 ? cut + 1 : Math.max(120, portion.lastIndexOf(" "));
+      chunks.push(remaining.slice(0, cut).trim());
+      remaining = remaining.slice(cut).trim();
+    }
+    if (remaining) chunks.push(remaining);
+    return chunks;
+  }
+
   async function nativeSay(text, generation) {
-    if (
-      !window.speechSynthesis ||
-      typeof window.SpeechSynthesisUtterance === "undefined"
-    ) {
+    if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance === "undefined") {
       throw Error("O navegador não oferece voz alternativa");
     }
     await waitForNativeVoices();
-    if (generation !== voiceGeneration || !voice) return;
-
-    const u = new SpeechSynthesisUtterance(text);
+    const synth = window.speechSynthesis;
     const selected = selectNativeVoice();
-    u.lang = locale();
-    u.rate = 1.05;
-    u.pitch = 1;
-    if (selected) {
-      u.voice = selected;
-      u.lang = selected.lang;
+    try {
+      for (const chunk of speechChunks(text)) {
+        if (generation !== voiceGeneration || !voice) return;
+        await new Promise((resolve, reject) => {
+          const u = new SpeechSynthesisUtterance(chunk);
+          u.lang = selected?.lang || locale();
+          u.rate = 1.05;
+          u.pitch = 1;
+          if (selected) u.voice = selected;
+          nativeUtterance = u;
+          let done = false, started = 0, deadline;
+          const finish = error => {
+            if (done) return;
+            done = true;
+            clearTimeout(deadline);
+            u.onstart = u.onend = u.onerror = null;
+            if (nativeUtterance === u) {
+              nativeUtterance = null;
+              nativeCancel = null;
+              closeMouth();
+            }
+            if (error) reject(error); else resolve();
+          };
+          nativeCancel = () => {
+            // Cancel before detaching so the browser cannot continue the old audio.
+            finish();
+            synth.cancel();
+          };
+          deadline = setTimeout(() => {
+            finish(Error("O aparelho não iniciou a voz. Toque no microfone para continuar."));
+            synth.cancel();
+          }, 8000);
+          u.onstart = () => {
+            if (generation !== voiceGeneration || nativeUtterance !== u) return;
+            started = performance.now();
+            clearTimeout(deadline);
+            deadline = setTimeout(() => {
+              finish(Error("A voz do aparelho parou de responder. Toque no microfone para continuar."));
+              synth.cancel();
+            }, Math.max(15000, chunk.length * 180));
+            function tick(now) {
+              if (done || nativeUtterance !== u || generation !== voiceGeneration) return;
+              if (!synth.speaking) {
+                closeMouth();
+                // Some engines omit onend. Stop the animation and release the turn.
+                if (now - started > 500) { finish(); return; }
+              } else if (synth.paused) {
+                window.MiokoAvatar?.closeMouth();
+                $("#miokoVideo")?.classList.remove("speaking");
+              } else {
+                $("#miokoVideo").classList.add("speaking");
+                const phase = (now - started) / 1000;
+                window.MiokoAvatar?.setMouth(Math.abs(Math.sin(phase * 13) * Math.sin(phase * 4.7)) * 0.8);
+              }
+              audioFrame = requestAnimationFrame(tick);
+            }
+            closeMouth();
+            audioFrame = requestAnimationFrame(tick);
+          };
+          u.onend = () => finish();
+          u.onerror = e => finish(Error(e.error || "Falha na voz do aparelho"));
+          try { synth.speak(u); } catch (e) { finish(e); }
+        });
+      }
+    } finally {
+      if (generation === voiceGeneration) {
+        speechPending = false;
+        closeMouth();
+        resumeListening();
+      }
     }
-    nativeUtterance = u;
-
-    u.onstart = () => {
-      if (generation !== voiceGeneration) return;
-      const started = performance.now();
-      function tick(now) {
-        if (
-          nativeUtterance !== u ||
-          generation !== voiceGeneration
-        ) {
-          closeMouth();
-          return;
-        }
-        const synth = window.speechSynthesis;
-        if (synth.speaking && !synth.paused) {
-          $("#miokoVideo").classList.add("speaking");
-          const phase = (now - started) / 1000;
-          const opening = Math.abs(
-            Math.sin(phase * 13) * Math.sin(phase * 4.7)
-          );
-          window.MiokoAvatar?.setMouth(opening * 0.8);
-        } else {
-          window.MiokoAvatar?.closeMouth();
-        }
-        audioFrame = requestAnimationFrame(tick);
-      }
-      closeMouth();
-      audioFrame = requestAnimationFrame(tick);
-    };
-
-    u.onend = () => {
-      if (nativeUtterance !== u) return;
-      nativeUtterance = null;
-      speechPending = false;
-      closeMouth();
-      resumeListening();
-    };
-
-    u.onerror = e => {
-      if (nativeUtterance !== u) return;
-      nativeUtterance = null;
-      speechPending = false;
-      closeMouth();
-      if (!["canceled", "interrupted"].includes(e.error)) {
-        add("ai",
-          "Não consegui reproduzir a voz do celular: " +
-          e.error + ". Toque em COMEÇAR AULA para tentar novamente."
-        );
-      }
-      resumeListening(600);
-    };
-
-    window.speechSynthesis.speak(u);
   }
 
   async function serviceSay(text, generation) {
@@ -576,7 +600,7 @@
         headers: headers(),
         signal: controller.signal,
         body: JSON.stringify({
-          message: message + "\n\n[Idioma da resposta: " + lang + ". Use exclusivamente esse idioma, exceto traduções ou exemplos solicitados.]",
+          message: message + "\n\n[Idioma da resposta: " + lang + ". Use exclusivamente esse idioma, exceto traduções ou exemplos solicitados. Converse sobre o assunto pedido; não imponha uma aula. Adapte explicações e vocabulário ao nível solicitado, do básico ao avançado." + (callMode ? " Esta é uma conversa por voz: responda em turnos curtos e naturais, sem listas longas, e mantenha o contexto." : "") + "]",
           language: lang,
           history: history.slice(0, -1).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
         })
