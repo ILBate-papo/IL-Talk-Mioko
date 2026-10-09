@@ -33,6 +33,7 @@
   let recognition = null;
   let listening = false;
   let voiceInputBlocked = false;
+  let micPaused = false;
   let replyPending = false;
   let speechPending = false;
   let currentAudio = null;
@@ -68,7 +69,7 @@
     const greeting = greetings[lang] || greetings.Português;
     add("ai", greeting, true);
     say(greeting);
-    if (!SR) add("ai", "Este navegador não oferece reconhecimento de voz. Você pode continuar digitando e ouvir minhas respostas.");
+    if (!SR) add("ai", "Este navegador não oferece reconhecimento de voz. Para conversar pelo microfone, abra no Chrome ou Edge. Aqui você pode escrever e ouvir minhas respostas.");
   }
 
   function add(type, text, save = false) {
@@ -131,7 +132,7 @@
 
   function resumeListening(delay = 400) {
     clearTimeout(listenTimer);
-    if (callMode) {
+    if (callMode && !micPaused && !voiceInputBlocked) {
       listenTimer = setTimeout(startListening, delay);
     }
   }
@@ -186,6 +187,7 @@
 
   function stopMedia() {
     callMode = null;
+    micPaused = false;
     conversationGeneration++;
     replyController?.abort();
     stopListening();
@@ -439,9 +441,12 @@
           if (generation !== voiceGeneration) return;
           releaseAudio();
           // Circuit breaker applies only to the failed voice service, never to conversation.
-          voiceRetryAfter = Date.now() + 60000;
+          const noCredits = /no credits remaining|insufficient_quota|exceeded your current quota/i.test(error.message);
+          voiceRetryAfter = Date.now() + (noCredits ? 300000 : 60000);
           console.warn(error.message);
-          add("ai", "Voz principal indisponível: " + error.message + ". Usando a voz do navegador.");
+          add("ai", noCredits
+            ? "A voz natural está sem créditos. Vou usar a voz disponível neste aparelho para continuar nossa conversa."
+            : "A voz natural está indisponível agora. Vou usar a voz deste aparelho.");
         }
       }
       await nativeSay(text, generation);
@@ -656,6 +661,7 @@
       $("#videoRoom").classList.add("in-call");
       $("#miokoVideo").classList.add("calling");
       $("#videoCall").textContent = "⏹ Encerrar vídeo";
+      v.muted = true;
       v.play().catch(() => {});
       add("ai",
         "Vídeo iniciado. A câmera mostra sua prévia; imagens não são enviadas à IA. Pode falar ou escrever."
@@ -678,7 +684,7 @@
     startVideo();
   };
 
-  $("#voiceCall").onclick = () => {
+  $("#voiceCall").onclick = async () => {
     if (callMode === "voice") {
       stopMedia();
       add("ai", "Chamada encerrada.");
@@ -691,6 +697,20 @@
     localStorage.ilVoice = "on";
     voiceLabel();
     callMode = "voice";
+    const session = conversationGeneration;
+    $("#voiceCall").textContent = "⏹ Encerrar chamada";
+    if (SR) {
+      try {
+        // Ask on the call gesture, rather than after the greeting has finished.
+        const permission = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+        permission.getTracks().forEach(track => track.stop());
+      } catch {
+        if (session !== conversationGeneration) return;
+        voiceInputBlocked = true;
+        add("ai", "Não consegui acessar o microfone. Permita o microfone nas configurações do site e toque nele para tentar novamente.");
+      }
+    }
+    if (session !== conversationGeneration) return;
     $("#miokoVideo").classList.add("calling");
     $("#voiceCall").textContent = "⏹ Encerrar chamada";
     add("ai",
@@ -720,14 +740,15 @@
     if (
       !callMode || !SR || recognition || listening ||
       currentAudio || nativeUtterance || speechPending ||
-      replyPending || voiceInputBlocked
+      replyPending || voiceInputBlocked || micPaused
     ) return;
 
     const r = new SR();
     recognition = r;
     r.lang = locale();
     r.continuous = false;
-    r.interimResults = false;
+    r.interimResults = true;
+    r.maxAlternatives = 1;
 
     r.onstart = () => {
       if (recognition !== r) return;
@@ -736,8 +757,11 @@
     };
     r.onresult = e => {
       if (recognition !== r) return;
-      const spoken =
-        e.results[e.results.length - 1][0].transcript.trim();
+      const results = Array.from(e.results);
+      const final = results.filter(result => result.isFinal);
+      const preview = results.map(result => result[0].transcript).join(" ").trim();
+      $("#mic").textContent = preview ? "🎙️ " + preview.slice(0, 80) : "🎙️ Ouvindo...";
+      const spoken = final.map(result => result[0].transcript).join(" ").trim();
       if (spoken) recognitionFailures = 0;
       if (spoken && !replyPending && !speechPending && !nativeUtterance && !currentAudio) send(spoken);
     };
@@ -780,17 +804,28 @@
 
   $("#mic").onclick = () => {
     if (!SR) {
-      alert(
-        "Este navegador não oferece reconhecimento de voz. " +
-        "Você pode escrever para a Mioko."
-      );
+      alert("Este navegador não oferece reconhecimento de voz. Abra esta chamada no Chrome ou Edge, ou continue escrevendo.");
+      return;
+    }
+    const interrupted = speechPending || currentAudio || nativeUtterance || replyPending;
+    if (listening && !interrupted) {
+      micPaused = true;
+      stopListening();
+      $("#mic").textContent = "🎙️ Microfone pausado — toque para falar";
       return;
     }
     voiceInputBlocked = false;
+    recognitionFailures = 0;
+    micPaused = false;
     enableVoice();
-    if (listening) {
-      stopListening();
-      return;
+    if (interrupted) {
+      stopSpeech();
+      if (replyPending) {
+        conversationGeneration++;
+        replyController?.abort();
+        // The current queue entry settles before another message is sent.
+        replyPending = false;
+      }
     }
     if (!callMode) {
       callMode = "voice";
@@ -805,3 +840,4 @@
   });
   window.addEventListener("pagehide", stopMedia);
 })();
+
