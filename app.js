@@ -52,6 +52,9 @@
   let conversationGeneration = 0;
   let replyController = null;
   let recognitionFailures = 0;
+  let recorderStop = null;
+  let recordingGeneration = 0;
+  let useRecorder = false;
 
   function voiceLabel() {
     $("#voice").textContent =
@@ -70,7 +73,7 @@
     const greeting = greetings[lang] || greetings.Português;
     add("ai", greeting, true);
     say(greeting);
-    if (!SR) add("ai", "Este navegador não oferece reconhecimento de voz. Para conversar pelo microfone, abra no Chrome ou Edge. Aqui você pode escrever e ouvir minhas respostas.");
+    
   }
 
   function add(type, text, save = false) {
@@ -118,6 +121,9 @@
 
   function stopListening() {
     clearTimeout(listenTimer);
+    recordingGeneration++;
+    recorderStop?.();
+    recorderStop = null;
     listening = false;
     const old = recognition;
     recognition = null;
@@ -298,6 +304,7 @@
     await waitForNativeVoices();
     const synth = window.speechSynthesis;
     const selected = selectNativeVoice();
+    if (!selected) throw Error("Este aparelho não tem voz de " + lang + ". Instale a voz desse idioma nas configurações de fala do aparelho ou teste no Chrome/Edge com essa voz disponível.");
     try {
       for (const chunk of speechChunks(text)) {
         if (generation !== voiceGeneration || !voice) return;
@@ -308,12 +315,12 @@
           u.pitch = 1;
           if (selected) u.voice = selected;
           nativeUtterance = u;
-          let done = false, started = 0, deadline;
+          let done = false, started = 0, deadline, boundaryUntil = 0;
           const finish = error => {
             if (done) return;
             done = true;
             clearTimeout(deadline);
-            u.onstart = u.onend = u.onerror = null;
+            u.onstart = u.onend = u.onerror = u.onboundary = null;
             if (nativeUtterance === u) {
               nativeUtterance = null;
               nativeCancel = null;
@@ -330,6 +337,11 @@
             finish(Error("O aparelho não iniciou a voz. Toque no microfone para continuar."));
             synth.cancel();
           }, 8000);
+          u.onboundary = e => {
+            if (done || generation !== voiceGeneration) return;
+            if (e.charIndex >= chunk.trimEnd().length - 1) { closeMouth(); return; }
+            boundaryUntil = performance.now() + 180;
+          };
           u.onstart = () => {
             if (generation !== voiceGeneration || nativeUtterance !== u) return;
             started = performance.now();
@@ -350,7 +362,8 @@
               } else {
                 $("#miokoVideo").classList.add("speaking");
                 const phase = (now - started) / 1000;
-                window.MiokoAvatar?.setMouth(Math.abs(Math.sin(phase * 13) * Math.sin(phase * 4.7)) * 0.8);
+                // Native speech exposes no audio samples. Animate only brief real speech boundaries.
+                window.MiokoAvatar?.setMouth(now < boundaryUntil ? Math.abs(Math.sin(phase * 13)) * 0.8 : 0);
               }
               audioFrame = requestAnimationFrame(tick);
             }
@@ -459,20 +472,6 @@
     speechPending = true;
 
     try {
-      if (Date.now() >= voiceRetryAfter) {
-        try { await serviceSay(text, generation); return; }
-        catch (error) {
-          if (generation !== voiceGeneration) return;
-          releaseAudio();
-          // Circuit breaker applies only to the failed voice service, never to conversation.
-          const noCredits = /no credits remaining|insufficient_quota|exceeded your current quota/i.test(error.message);
-          voiceRetryAfter = Date.now() + (noCredits ? 300000 : 60000);
-          console.warn(error.message);
-          add("ai", noCredits
-            ? "A voz natural está sem créditos. Vou usar a voz disponível neste aparelho para continuar nossa conversa."
-            : "A voz natural está indisponível agora. Vou usar a voz deste aparelho.");
-        }
-      }
       await nativeSay(text, generation);
     } catch (e) {
       if (generation !== voiceGeneration) return;
@@ -723,7 +722,7 @@
     callMode = "voice";
     const session = conversationGeneration;
     $("#voiceCall").textContent = "⏹ Encerrar chamada";
-    if (SR) {
+    if (navigator.mediaDevices?.getUserMedia) {
       try {
         // Ask on the call gesture, rather than after the greeting has finished.
         const permission = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
@@ -760,13 +759,87 @@
   const SR =
     window.SpeechRecognition || window.webkitSpeechRecognition;
 
+
+  async function startRecordedListening() {
+    if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) {
+      voiceInputBlocked = true;
+      add("ai", "Este navegador não permite gravar o microfone. Use Chrome ou Edge.");
+      return;
+    }
+    const token = ++recordingGeneration;
+    listening = true;
+    let mic, rec, node, meter, timer, submitted = false;
+    const cleanup = () => {
+      clearInterval(timer);
+      if (rec?.state === "recording") { rec.onstop = null; rec.stop(); }
+      node?.disconnect(); meter?.disconnect();
+      mic?.getTracks().forEach(t => t.stop());
+    };
+    recorderStop = cleanup;
+    try {
+      await unlockAudio();
+      mic = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+      if (token !== recordingGeneration) { cleanup(); return; }
+      const mime = ["audio/webm;codecs=opus","audio/mp4","audio/ogg;codecs=opus"].find(x => MediaRecorder.isTypeSupported(x));
+      rec = new MediaRecorder(mic, mime ? {mimeType:mime} : undefined);
+      const chunks = [];
+      rec.ondataavailable = e => { if(e.data.size) chunks.push(e.data); };
+      node = audioContext.createMediaStreamSource(mic);
+      meter = audioContext.createAnalyser(); meter.fftSize=1024; node.connect(meter);
+      const samples = new Float32Array(meter.fftSize);
+      let heard=false, quietSince=0, began=performance.now();
+      const finish = () => { if(submitted) return; submitted=true; clearInterval(timer); rec.stop(); };
+      rec.onstop = async () => {
+        cleanup();
+        if(token !== recordingGeneration) return;
+        recorderStop=null;
+        if (!heard) { listening=false; resumeListening(500); return; }
+        $("#mic").textContent="🎙️ Entendendo sua fala...";
+        try {
+          const form = new FormData();
+          const type=rec.mimeType || "audio/webm";
+          form.append("file",new Blob(chunks,{type}),type.includes("mp4")?"fala.mp4":type.includes("ogg")?"fala.ogg":"fala.webm");
+          form.append("language",locale().split("-")[0]);
+          const h=headers(); delete h["Content-Type"];
+          const response=await fetch(config().VOICE_ENDPOINT,{method:"POST",headers:h,body:form,signal:AbortSignal.timeout(30000)});
+          const data=await response.json();
+          if(token !== recordingGeneration) return;
+          if(!response.ok) throw Error(data.error || "Falha ao entender a fala");
+          listening=false;
+          if(data.text?.trim()) send(data.text); else resumeListening();
+        } catch(e) {
+          if(token !== recordingGeneration) return;
+          listening=false; voiceInputBlocked=true;
+          add("ai","Microfone: " + e.message + ". Toque no microfone para tentar novamente.");
+        }
+      };
+      rec.start();
+      $("#mic").textContent="🎙️ Ouvindo... fale e faça uma pausa";
+      timer=setInterval(() => {
+        if(token !== recordingGeneration) { cleanup(); return; }
+        meter.getFloatTimeDomainData(samples);
+        const rms=Math.sqrt(samples.reduce((sum,v)=>sum+v*v,0)/samples.length);
+        const now=performance.now();
+        if(rms>0.018) { heard=true; quietSince=0; }
+        else if(heard) { if(!quietSince) quietSince=now; if(now-quietSince>1000) finish(); }
+        if(now-began>20000) finish();
+      },100);
+    } catch(e) {
+      cleanup();
+      if(token !== recordingGeneration) return;
+      listening=false; recorderStop=null; voiceInputBlocked=true;
+      add("ai","Não consegui abrir o microfone: " + e.message);
+    }
+  }
+
   function startListening() {
     if (
-      !callMode || !SR || recognition || listening ||
+      !callMode || recognition || listening ||
       currentAudio || nativeUtterance || speechPending ||
       replyPending || voiceInputBlocked || micPaused
     ) return;
 
+    if (!SR || useRecorder) { startRecordedListening(); return; }
     const r = new SR();
     recognition = r;
     r.lang = locale();
@@ -799,8 +872,11 @@
     r.onerror = e => {
       if (recognition !== r) return;
       listening = false;
+      if (["network", "language-not-supported", "service-not-allowed"].includes(e.error) && window.MediaRecorder) {
+        useRecorder = true; stopListening(); resumeListening(); return;
+      }
       if ([
-        "not-allowed", "service-not-allowed", "audio-capture"
+        "not-allowed", "audio-capture"
       ].includes(e.error)) {
         voiceInputBlocked = true;
       }
@@ -827,10 +903,7 @@
   }
 
   $("#mic").onclick = () => {
-    if (!SR) {
-      alert("Este navegador não oferece reconhecimento de voz. Abra esta chamada no Chrome ou Edge, ou continue escrevendo.");
-      return;
-    }
+
     const interrupted = speechPending || currentAudio || nativeUtterance || replyPending;
     if (listening && !interrupted) {
       micPaused = true;
@@ -860,7 +933,8 @@
   };
 
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && callMode && !voiceInputBlocked) resumeListening();
+    if (document.hidden) { stopListening(); stopSpeech(); }
+    else if (callMode && !voiceInputBlocked) resumeListening();
   });
   window.addEventListener("pagehide", stopMedia);
 })();
