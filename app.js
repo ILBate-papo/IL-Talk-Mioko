@@ -1,7 +1,7 @@
 // IL TALK MIOKO — serviço de voz com alternativa do navegador.
 {
   const script = document.createElement("script");
-  script.src = "mioko-avatar.js?v=20261009-voz3";
+  script.src = "mioko-avatar.js?v=20261009-inicio";
   document.head.appendChild(script);
 }
 
@@ -288,10 +288,10 @@
     // Short utterances keep mobile speech engines from holding one long response.
     const chunks = [];
     let remaining = text.trim();
-    while (remaining.length > 240) {
-      const portion = remaining.slice(0, 240);
+    while (remaining.length > 120) {
+      const portion = remaining.slice(0, 120);
       let cut = Math.max(portion.lastIndexOf(". "), portion.lastIndexOf("? "), portion.lastIndexOf("! "), portion.lastIndexOf("。"), portion.lastIndexOf("？"), portion.lastIndexOf("！"));
-      cut = cut >= 60 ? cut + 1 : Math.max(120, portion.lastIndexOf(" "));
+      cut = cut >= 40 ? cut + 1 : Math.max(60, portion.lastIndexOf(" "));
       chunks.push(remaining.slice(0, cut).trim());
       remaining = remaining.slice(cut).trim();
     }
@@ -317,7 +317,7 @@
           u.pitch = 1;
           if (selected) u.voice = selected;
           nativeUtterance = u;
-          let done = false, started = 0, deadline, boundaryUntil = 0;
+          let done = false, started = 0, deadline;
           const finish = error => {
             if (done) return;
             done = true;
@@ -341,12 +341,15 @@
           }, 8000);
           u.onboundary = e => {
             if (done || generation !== voiceGeneration) return;
-            if (e.charIndex >= chunk.trimEnd().length - 1) { closeMouth(); return; }
-            boundaryUntil = performance.now() + 180;
+            // The final word boundary occurs before its audio finishes.
+            // Close only on end, pause or cancel.
           };
           u.onstart = () => {
             if (generation !== voiceGeneration || nativeUtterance !== u) return;
             started = performance.now();
+            closeMouth();
+            $("#miokoVideo").classList.add("speaking");
+            window.MiokoAvatar?.setMouth(0.45, true);
             clearTimeout(deadline);
             deadline = setTimeout(() => {
               finish(Error("A voz do aparelho parou de responder. Toque no microfone para continuar."));
@@ -354,7 +357,7 @@
             }, Math.max(15000, chunk.length * 180));
             function tick(now) {
               if (done || nativeUtterance !== u || generation !== voiceGeneration) return;
-              if (!synth.speaking) {
+              if (!synth.speaking && now - started > 500) {
                 closeMouth();
                 // Some engines omit onend. Stop the animation and release the turn.
                 if (now - started > 500) { finish(); return; }
@@ -363,7 +366,7 @@
                 $("#miokoVideo")?.classList.remove("speaking");
               } else {
                 $("#miokoVideo").classList.add("speaking");
-                const phase = (now - started) / 1000;
+                const phase = (now - started) / 1000 + 0.04;
                 // Android often omits boundary events. This is an estimated articulation
                 // while synthesis is active; onend/cancel still close the mouth immediately.
                 const syllable = Math.abs(Math.sin(phase * 12.5));
@@ -372,7 +375,6 @@
               }
               audioFrame = requestAnimationFrame(tick);
             }
-            closeMouth();
             audioFrame = requestAnimationFrame(tick);
           };
           u.onend = () => finish();
