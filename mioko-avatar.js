@@ -8,7 +8,7 @@
   canvas.setAttribute('aria-label', portrait.alt);
   const ctx = canvas.getContext('2d');
   const photo = new Image();
-  let mouth = 0, frame = 0, nextBlink = performance.now() + 3500, blinkStart = 0, lastDraw = 0;
+  let mouth = 0, frame = 0, nextBlink = performance.now() + 3500, blinkStart = 0, lastDraw = 0, lastMouthUpdate = 0;
   function ellipse(x,y,rx,ry,color) {
     ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
   }
@@ -16,6 +16,7 @@
     if (!photo.naturalWidth) return;
     if (!still && now-lastDraw < 33) { frame=requestAnimationFrame(draw); return; }
     lastDraw=now;
+    if (mouth && now - lastMouthUpdate > 250) { mouth=0; canvas.dataset.mouth="0"; }
     ctx.clearRect(0,0,1024,1536); ctx.drawImage(photo,0,0,1024,1536);
     if (mouth > .025) {
       // Overlay covers only the illustrated lips, never the nose or cheeks.
@@ -42,7 +43,7 @@
   photo.onload=()=>{canvas.width=512;canvas.height=768;ctx.setTransform(.5,0,0,.5,0,0);portrait.replaceWith(canvas);frame=requestAnimationFrame(draw);};
   photo.src=portrait.src;
   window.MiokoAvatar={
-    setMouth(value){mouth=Math.max(0,Math.min(1,Number(value)||0));canvas.dataset.mouth=String(mouth);},
+    setMouth(value){lastMouthUpdate=performance.now();mouth=Math.max(0,Math.min(1,Number(value)||0));canvas.dataset.mouth=String(mouth);},
     closeMouth(){mouth=0;canvas.dataset.mouth='0';draw(performance.now(),true);}
   };
   window.addEventListener('pagehide',()=>{mouth=0;cancelAnimationFrame(frame);});
