@@ -1,0 +1,23 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.iltalk.mioko'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.iltalk.mioko'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0'
+    }
+    signingConfigs {
+        release {
+            storeFile file(System.getenv('MIOKO_SIGNING_STORE') ?: '/missing-signing-key')
+            storePassword System.getenv('MIOKO_SIGNING_PASSWORD')
+            keyAlias 'mioko-release'
+            keyPassword System.getenv('MIOKO_SIGNING_PASSWORD')
+        }
+    }
+    buildTypes { release { signingConfig signingConfigs.release; minifyEnabled false } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies { implementation 'androidx.webkit:webkit:1.14.0' }
