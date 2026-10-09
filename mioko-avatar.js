@@ -8,7 +8,7 @@
   canvas.setAttribute('aria-label', portrait.alt);
   const ctx = canvas.getContext('2d');
   const photo = new Image();
-  let mouth = 0, frame = 0, nextBlink = performance.now() + 3500, blinkStart = 0, lastDraw = 0, lastMouthUpdate = 0;
+  let mouth = 0, frame = 0, nextBlink = performance.now() + 1800, blinkStart = 0, lastDraw = 0, lastMouthUpdate = 0;
   function ellipse(x,y,rx,ry,color) {
     ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); ctx.fillStyle=color; ctx.fill();
   }
@@ -30,8 +30,8 @@
     }
     if (!still && now>=nextBlink && !blinkStart) blinkStart=now;
     if (blinkStart && !still) {
-      const t=(now-blinkStart)/180;
-      if(t>=1){blinkStart=0;nextBlink=now+3500+Math.random()*3500;}
+      const t=(now-blinkStart)/280;
+      if(t>=1){blinkStart=0;nextBlink=now+2200+Math.random()*2000;}
       else if(t>.18 && t<.82){
         for(const [x,y] of [[428,412],[576,410]]){
           ellipse(x,y,49,27,'#f4bca6');ctx.beginPath();ctx.moveTo(x-43,y);ctx.quadraticCurveTo(x,y+20,x+43,y-1);ctx.strokeStyle='#442628';ctx.lineWidth=5;ctx.stroke();
