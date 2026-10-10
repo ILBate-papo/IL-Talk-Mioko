@@ -47,3 +47,12 @@ for(const [locale,text] of [['es-ES','Buenos días.'],['fr-FR','Bonjour.'],['ko-
   assert.equal(spoken[1].text,text);assert.equal(spoken[1].rate,0.85);
 }
 console.log('Passed: all seven voice locales, bilingual order, slower examples, microphone sequencing, missing-voice protection and immersion.');
+spoken.length=0;
+context.mixedPlan=[{locale:'pt-BR',text:'Diga こんにちは。 Isso significa olá. 안녕하세요. Agora repita.'}];
+await vm.runInContext('nativeSay("aula",1,mixedPlan)',context);
+assert.deepEqual(spoken.map(x=>x.locale),['pt-BR','ja-JP','pt-BR','ko-KR','pt-BR']);
+spoken.length=0;
+context.mixedPlan=[{locale:'ja-JP',text:'Em japonês, diga こんにちは。 Agora repita.'}];
+await vm.runInContext('nativeSay("aula",1,mixedPlan)',context);
+assert.deepEqual(spoken.map(x=>x.locale),['pt-BR','ja-JP','pt-BR']);
+console.log('Passed: mislabeled Japanese/Korean script never uses the Portuguese voice; beginner explanation stays Portuguese.');

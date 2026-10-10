@@ -87,7 +87,7 @@
   let recognitionFailures = 0;
   let recorderStop = null;
   let recordingGeneration = 0;
-  const preferRecorder = /Android/i.test(navigator.userAgent || "") && !window.MiokoNativeSpeech;
+  const preferRecorder = !(window.SpeechRecognition || window.webkitSpeechRecognition);
   let useRecorder = preferRecorder;
 
   function voiceLabel() {
@@ -337,13 +337,12 @@
 
   // Speech plan: keep Japanese script on a Japanese voice inside Portuguese explanations.
   function speechSegments(text, defaultLocale) {
-    if (!["pt-BR", "ja-JP"].includes(defaultLocale)) return [{text, locale: defaultLocale}];
-    const pattern = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}ー][\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}ー\s。、！？「」『』（）・…0-9０-９]*/gu;
+    const pattern = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}ー][\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}ー\s。、！？「」『』（）・…0-9０-９]*|\p{Script=Hangul}[\p{Script=Hangul}\s.,!?…0-9]*/gu;
     const parts = []; let position = 0;
     for (const match of text.matchAll(pattern)) {
       const before = text.slice(position, match.index).trim();
       if (before) parts.push({text: before, locale: defaultLocale});
-      parts.push({text: match[0].trim(), locale: "ja-JP"});
+      parts.push({text: match[0].trim(), locale: /\p{Script=Hangul}/u.test(match[0]) ? "ko-KR" : "ja-JP"});
       position = match.index + match[0].length;
     }
     const after = text.slice(position).trim();
@@ -363,7 +362,8 @@
       ? segments.map(part => {
           if (!validLocales.has(part.locale) || typeof part.text !== "string") throw Error("Idioma da fala não reconhecido.");
           return {text: cleanSpeech(part.text), locale: part.locale};
-        }).filter(part => part.text)
+        }).filter(part => part.text).flatMap(part => speechSegments(part.text,
+          spokenLocale() === "pt-BR" && ["ja-JP", "ko-KR"].includes(part.locale) ? "pt-BR" : part.locale))
       : speechSegments(text, spokenLocale());
     const chunks = parts.flatMap(part => speechChunks(part.text).map(text => ({text, locale: part.locale})));
     const selectedVoices = new Map();
@@ -883,6 +883,28 @@
     window.SpeechRecognition || window.webkitSpeechRecognition;
 
 
+  // A pause ends a turn; a short pause inside a sentence does not.
+  function createTurnDetector() {
+    const levels = [];
+    let heard = false, quietSince = null, voicedFrames = 0;
+    return (rms, now) => {
+      levels.push(rms);
+      if (levels.length > 40) levels.shift();
+      const ordered = [...levels].sort((a, b) => a - b);
+      const floor = Math.min(0.012, ordered[Math.floor((ordered.length - 1) * 0.2)]);
+      const threshold = Math.max(0.008, floor * 1.8);
+      if (rms > threshold) {
+        voicedFrames++;
+        if (voicedFrames >= 2) heard = true;
+        quietSince = null;
+      } else {
+        voicedFrames = 0;
+        if (heard && quietSince === null) quietSince = now;
+      }
+      return {heard, finished: heard && quietSince !== null && now - quietSince >= 650};
+    };
+  }
+
   async function startRecordedListening() {
     if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) {
       voiceInputBlocked = true;
@@ -910,7 +932,8 @@
       node = audioContext.createMediaStreamSource(mic);
       meter = audioContext.createAnalyser(); meter.fftSize=1024; node.connect(meter);
       const samples = new Float32Array(meter.fftSize);
-      let heard=false, quietSince=0, began=performance.now();
+      let heard=false, began=performance.now();
+      const detectTurn = createTurnDetector();
       const finish = () => { if(submitted) return; submitted=true; clearInterval(timer); rec.stop(); };
       rec.onstop = async () => {
         cleanup();
@@ -943,8 +966,9 @@
         meter.getFloatTimeDomainData(samples);
         const rms=Math.sqrt(samples.reduce((sum,v)=>sum+v*v,0)/samples.length);
         const now=performance.now();
-        if(rms>0.008) { heard=true; quietSince=0; }
-        else if(heard) { if(!quietSince) quietSince=now; if(now-quietSince>1000) finish(); }
+        const turn = detectTurn(rms, now);
+        heard = turn.heard;
+        if (turn.finished) finish();
         if(now-began>20000) finish();
       },100);
     } catch(e) {
@@ -974,6 +998,9 @@
       if (recognition !== r) return;
       listening = true;
       $("#mic").textContent = "🎙️ Ouvindo sua voz em " + (inputLocale() === "pt-BR" ? "português" : lang.toLowerCase()) + "...";
+    };
+    r.onspeechend = () => {
+      if (recognition === r) { try { r.stop(); } catch {} }
     };
     r.onresult = e => {
       if (recognition !== r) return;
