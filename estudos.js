@@ -42,7 +42,7 @@ $('prepare').onclick=async()=>{
 $('clear').onclick=()=>{resetPrepared();pdf?.destroy();pdf=null;$('pdfPages').hidden=true;$('upload').value='';$('material').value='';$('prepare').disabled=true;tell('Material removido.');};
 $('analyze').onclick=async()=>{
  if(busy)return;
- if($('upload').files.length&&!prepared){tell('Prepare as páginas ou fotos antes de analisar.');return;}
+ if($('upload').files.length&&!prepared){await $('prepare').onclick();if(!prepared)return;}
  const message=$('question').value.trim(),material=$('material').value.trim();
  if(!message||(!material&&!images.length)){tell('Informe o pedido e prepare um arquivo, ou cole o material.');return;}
  lock(true);$('answerSection').hidden=true;tell('Mioko está analisando o material…');

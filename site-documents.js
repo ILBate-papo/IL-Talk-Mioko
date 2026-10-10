@@ -1,0 +1,35 @@
+// Document review for the website. Native microphone/voice code is not changed.
+const maxSide=1800;
+let pdfjs;
+function imageData(canvas,label){const url=canvas.toDataURL('image/jpeg',.9);if(url.length>1900000)throw Error('A página ficou muito grande. Recorte o trecho importante e tente novamente.');return {url,label:label.slice(0,160)};}
+async function openPDF(file){
+ if(!pdfjs){pdfjs=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs');pdfjs.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';}
+ const task=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),isEvalSupported:false,standardFontDataUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/standard_fonts/',cMapUrl:'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/cmaps/',cMapPacked:true});
+ task.onPassword=()=>task.destroy();
+ try{return await task.promise;}catch(e){throw Error(e.name==='PasswordException'?'O PDF pede senha. Envie uma cópia desbloqueada ou uma foto das páginas.':'Não consegui abrir o PDF. Confira se o arquivo está completo: '+e.message);}
+}
+async function renderPhoto(file){const src=URL.createObjectURL(file);try{const image=new Image();image.src=src;await image.decode();const scale=Math.min(1,maxSide/Math.max(image.width,image.height));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(image.width*scale));canvas.height=Math.max(1,Math.round(image.height*scale));const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(image,0,0,canvas.width,canvas.height);return imageData(canvas,file.name);}finally{URL.revokeObjectURL(src);}}
+function choose(file,pages){return new Promise(resolve=>{
+ const dialog=document.createElement('dialog');dialog.style.cssText='background:#101d30;color:#eef4ff;border:1px solid #75c3d6;border-radius:16px;width:min(94vw,540px);max-height:90vh;overflow:auto;padding:22px;font:16px/1.5 system-ui';
+ dialog.innerHTML='<form method="dialog"><h2 style="margin-top:0">Enviar para a Mioko</h2><p data-file></p><label>Tipo de análise<select name="purpose" style="display:block;width:100%;padding:10px;margin:8px 0 16px"><option value="study">Questões, prova ou concurso</option><option value="exam">Explicar exame de saúde</option><option value="document">Explicar outro documento</option></select></label><div data-pages><label>Primeira página <input name="first" type="number" min="1" value="1" style="width:80px;padding:8px"></label> <label>Última página <input name="last" type="number" min="1" style="width:80px;padding:8px"></label><p>Até 3 páginas por análise. A Mioko lerá somente esse trecho.</p></div><label>Seu pedido<textarea name="question" maxlength="6000" rows="3" style="display:block;width:100%;padding:10px;margin:8px 0">Explique o material enviado em linguagem simples.</textarea></label><label>Suas respostas ou gabarito (opcional)<textarea name="material" maxlength="18000" rows="3" style="display:block;width:100%;padding:10px;margin:8px 0"></textarea></label><p style="font-size:14px">O trecho escolhido será enviado à IA. Em exames, cubra os dados pessoais que não forem necessários. A explicação não substitui avaliação de saúde.</p><p data-error role="status" style="color:#ffb9ae"></p><button value="cancel" formnovalidate style="padding:12px">Cancelar</button> <button value="send" style="padding:12px">Enviar e analisar</button></form>';
+ dialog.querySelector('[data-file]').textContent=file.name+(pages?' · '+pages+' páginas':'');dialog.querySelector('[data-pages]').hidden=!pages;
+ const form=dialog.querySelector('form'),first=form.elements.first,last=form.elements.last;first.max=last.max=pages||1;last.value=Math.min(pages||1,3);
+ form.elements.purpose.onchange=()=>{form.elements.question.value=form.elements.purpose.value==='exam'?'Explique os termos, valores, unidades e referências deste exame. Não faça diagnóstico nem indique remédios.':form.elements.purpose.value==='study'?'Explique as questões e compare minhas respostas com o gabarito, se fornecido. Sem gabarito, identifique a resolução como sugestão.':'Explique este documento em linguagem simples.';};
+ let settled=false;const finish=value=>{if(settled)return;settled=true;dialog.remove();resolve(value);};dialog.oncancel=()=>finish(null);dialog.onclose=()=>finish(null);
+ form.onsubmit=event=>{event.preventDefault();if(event.submitter?.value==='cancel'){finish(null);return;}const start=Number(first.value),end=Number(last.value);if(pages&&(!Number.isInteger(start)||!Number.isInteger(end)||start<1||end<start||end>pages||end-start+1>3)){dialog.querySelector('[data-error]').textContent='Escolha até três páginas consecutivas válidas.';return;}const message=form.elements.question.value.trim();if(!message){dialog.querySelector('[data-error]').textContent='Escreva o que deseja entender.';return;}finish({first:start,last:end,message,material:form.elements.material.value,purpose:form.elements.purpose.value});};
+ document.body.append(dialog);dialog.showModal();
+});}
+export async function analyzeFile(file,config,headers,onStatus){
+ if(!file.size||file.size>20*1024*1024)throw Error('Escolha um arquivo de até 20 MB.');
+ const isPDF=file.type==='application/pdf'||/\.pdf$/i.test(file.name);if(!isPDF&&!/^image\/(jpeg|png|webp)$/.test(file.type))throw Error('Escolha um PDF ou foto JPEG, PNG ou WebP.');
+ let pdf;try{
+  onStatus('Abrindo '+file.name+'…');if(isPDF)pdf=await openPDF(file);
+  const choice=await choose(file,pdf?.numPages);if(!choice)return null;
+  const images=[];if(pdf){for(let n=choice.first;n<=choice.last;n++){onStatus('Lendo página '+n+'…');const page=await pdf.getPage(n),original=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(2,maxSide/Math.max(original.width,original.height))});const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;images.push(imageData(canvas,file.name+' — página '+n));page.cleanup();}}
+  else images.push(await renderPhoto(file));
+  onStatus('Mioko está analisando o arquivo…');const response=await fetch('https://'+config.SUPABASE_PROJECT_REF+'.supabase.co/functions/v1/il-study',{method:'POST',headers:await headers(),signal:AbortSignal.timeout(60000),body:JSON.stringify({...choice,images})});
+  const raw=await response.text();let data;try{data=JSON.parse(raw);}catch{throw Error('O serviço devolveu uma resposta inválida (HTTP '+response.status+').');}
+  if(!response.ok)throw Error(data.error||data.message||'Falha na análise (HTTP '+response.status+').');if(!data.answer)throw Error('A análise voltou sem explicação.');
+  return {answer:data.answer+(data.incomplete?'\n\nA análise ficou incompleta. Envie menos questões por vez.':''),description:'Arquivo: '+file.name+(pdf?' — páginas '+choice.first+' a '+choice.last:'')+'\nPedido: '+choice.message};
+ }finally{await pdf?.destroy();}
+}

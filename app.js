@@ -990,12 +990,41 @@
   ["#photoIn", "#fileIn"].forEach(id => {
     $(id).onchange = e => {
       const file = e.target.files[0];
-      if (file) {
-        add("user",
-          "Arquivo selecionado: " + file.name +
-          " (upload ainda não conectado ao serviço)."
-        );
+      e.target.value = "";
+      if (!file) return;
+      // Preserve the native app's existing handlers; connect documents on the website.
+      if (window.MiokoNativeMicrophone || window.__miokoNativeInstalled) {
+        add("user", "Arquivo selecionado: " + file.name + " (upload ainda não conectado ao serviço).");
+        return;
       }
+      const conversation = conversationGeneration;
+      replyQueue = replyQueue.catch(() => {}).then(async () => {
+        if (conversation !== conversationGeneration) return;
+        replyPending = true;
+        stopListening(); stopSpeech();
+        const pending = add("ai", "Abrindo arquivo…");
+        try {
+          const documents = await import("./site-documents.js?v=20261010-2");
+          const result = await documents.analyzeFile(file, config(), headers, text => {
+            pending.querySelector("p").textContent = text;
+            callStatus(text);
+          });
+          pending.remove();
+          if (!result || conversation !== conversationGeneration) return;
+          add("user", result.description, true);
+          add("ai", result.answer, true);
+          say(result.answer, [{locale:"pt-BR", text:result.answer}]);
+        } catch (error) {
+          pending.remove();
+          if (conversation === conversationGeneration) {
+            const notice = "Não consegui ler o arquivo: " + (error.name === "TimeoutError" ? "a análise demorou demais. Envie menos páginas." : error.message);
+            add("ai", notice); callStatus(notice);
+          }
+        } finally {
+          replyPending = false;
+          if (!speechPending && !currentAudio && !nativeUtterance) resumeListening(500);
+        }
+      });
     };
   });
 
@@ -1285,6 +1314,7 @@
   });
   window.addEventListener("pagehide", handleMediaPageHide);
 })();
+
 
 
 
