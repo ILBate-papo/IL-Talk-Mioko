@@ -36,6 +36,11 @@ public class MainActivity extends Activity {
     private String voiceScript = "";
     private PermissionRequest pendingPermission;
     private ValueCallback<Uri[]> pendingFile;
+    private android.media.MediaRecorder microphoneRecorder;
+    private java.io.File microphoneFile;
+    private String microphoneId = "", pendingMicrophoneId = "";
+    private final android.os.Handler microphoneHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable microphoneMeter;
 
     private boolean trusted(Uri uri) {
         return uri != null && "https".equals(uri.getScheme()) && "ilbate-papo.github.io".equals(uri.getHost())
@@ -68,7 +73,7 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " ILTalkMioko/1.0.1");
+        settings.setUserAgentString(settings.getUserAgentString() + " ILTalkMioko/1.0.3");
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
         try (java.io.InputStream input = getAssets().open("native-voice.js"); java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
             byte[] buffer = new byte[4096]; int count;
@@ -159,6 +164,11 @@ public class MainActivity extends Activity {
     }
     @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(code, permissions, results);
+        if (code == 103 && !pendingMicrophoneId.isEmpty()) {
+            String id = pendingMicrophoneId; pendingMicrophoneId = "";
+            if (trustedPage() && checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startNativeMicrophone(id);
+            else voiceEvent(id, "mic-error", "Permita o microfone nas configurações do aplicativo.");
+        }
         if (code == 101 && pendingPermission != null) { PermissionRequest request = pendingPermission; pendingPermission = null; grantMedia(request); }
     }
     @Override protected void onActivityResult(int code, int result, Intent data) {
@@ -167,6 +177,17 @@ public class MainActivity extends Activity {
     }
     private void handleVoice(JSONObject message) throws Exception {
         String action = message.optString("action");
+        if (action.equals("mic-start")) {
+            String id = message.optString("id");
+            if (id.isEmpty() || id.length() > 80) return;
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                pendingMicrophoneId = id;
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 103);
+            } else startNativeMicrophone(id);
+            return;
+        }
+        if (action.equals("mic-stop")) { if (message.optString("id").equals(microphoneId)) stopNativeMicrophone(true); return; }
+        if (action.equals("mic-cancel")) { String id = message.optString("id"); if (id.equals(pendingMicrophoneId)) pendingMicrophoneId = ""; if (id.equals(microphoneId)) stopNativeMicrophone(false); return; }
         if (action.equals("voices")) { sendVoices(); return; }
         if (action.equals("cancel")) { if (tts != null) tts.stop(); return; }
         if (!action.equals("speak")) return;
@@ -180,6 +201,63 @@ public class MainActivity extends Activity {
         tts.setSpeechRate((float)Math.max(0.5, Math.min(2, message.optDouble("rate", 1))));
         tts.setPitch((float)Math.max(0.5, Math.min(2, message.optDouble("pitch", 1))));
         if (tts.speak(text, TextToSpeech.QUEUE_FLUSH, new Bundle(), id) == TextToSpeech.ERROR) voiceEvent(id, "error", "Não foi possível iniciar a voz do Android");
+    }
+    private void startNativeMicrophone(String id) {
+        stopNativeMicrophone(false);
+        microphoneId = id;
+        try {
+            microphoneFile = java.io.File.createTempFile("mioko-mic-", ".m4a", getCacheDir());
+            microphoneRecorder = new android.media.MediaRecorder();
+            microphoneRecorder.setAudioSource(android.media.MediaRecorder.AudioSource.MIC);
+            microphoneRecorder.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4);
+            microphoneRecorder.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC);
+            microphoneRecorder.setAudioSamplingRate(16000);
+            microphoneRecorder.setAudioEncodingBitRate(32000);
+            microphoneRecorder.setOutputFile(microphoneFile.getAbsolutePath());
+            microphoneRecorder.prepare();
+            microphoneRecorder.start();
+            voiceEvent(id, "mic-start", null);
+            microphoneMeter = new Runnable() {
+                public void run() {
+                    if (microphoneRecorder == null || !id.equals(microphoneId)) return;
+                    try {
+                        emit(new JSONObject().put("type", "mic-level").put("id", id)
+                            .put("level", microphoneRecorder.getMaxAmplitude() / 32768.0));
+                        microphoneHandler.postDelayed(this, 100);
+                    } catch (Exception error) {
+                        stopNativeMicrophone(false);
+                        voiceEvent(id, "mic-error", "Falha na captura de áudio do Android.");
+                    }
+                }
+            };
+            microphoneHandler.postDelayed(microphoneMeter, 100);
+        } catch (Exception error) {
+            stopNativeMicrophone(false);
+            voiceEvent(id, "mic-error", "Não consegui abrir o microfone nativo: " + error.getClass().getSimpleName());
+        }
+    }
+    private void stopNativeMicrophone(boolean submit) {
+        String id = microphoneId;
+        microphoneId = "";
+        if (microphoneMeter != null) microphoneHandler.removeCallbacks(microphoneMeter);
+        microphoneMeter = null;
+        android.media.MediaRecorder recorder = microphoneRecorder;
+        microphoneRecorder = null;
+        java.io.File file = microphoneFile;
+        microphoneFile = null;
+        boolean stopped = false;
+        if (recorder != null) {
+            try { recorder.stop(); stopped = true; } catch (Exception ignored) { }
+            recorder.release();
+        }
+        try {
+            if (submit && stopped && file != null && file.length() > 0 && file.length() <= 2097152) {
+                byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+                emit(new JSONObject().put("type", "mic-data").put("id", id).put("mime", "audio/mp4")
+                    .put("audio", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)));
+            } else if (submit) voiceEvent(id, "mic-error", "A gravação não produziu áudio. Tente falar novamente.");
+        } catch (Exception error) { voiceEvent(id, "mic-error", "Não consegui preparar sua gravação."); }
+        finally { if (file != null) file.delete(); }
     }
     private void sendVoices() {
         if (!ttsReady || tts == null) return;
@@ -208,13 +286,15 @@ public class MainActivity extends Activity {
     // while the user is granting microphone/camera access.
     @Override protected void onStop() {
         super.onStop();
-        if (pendingPermission != null || pendingFile != null) return;
+        if (pendingPermission != null || pendingFile != null || !pendingMicrophoneId.isEmpty()) return;
         if (trustedPage()) web.evaluateJavascript("window.dispatchEvent(new Event('pagehide'));", null);
+        stopNativeMicrophone(false);
         if (tts != null) tts.stop();
         if (web != null) web.onPause();
     }
-    @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
+    @Override protected void onResume() { super.onResume(); if (web != null) { web.onResume(); if (trustedPage()) web.evaluateJavascript("window.dispatchEvent(new Event('pageshow'));", null); } }
     @Override protected void onDestroy() {
+        stopNativeMicrophone(false);
         if (pendingPermission != null) pendingPermission.deny();
         if (pendingFile != null) pendingFile.onReceiveValue(null);
         if (tts != null) { tts.stop(); tts.shutdown(); }

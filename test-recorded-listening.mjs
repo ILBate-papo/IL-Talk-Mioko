@@ -19,7 +19,7 @@ class Recorder {
 }
 const c=vm.createContext({window:{MediaRecorder:Recorder},MediaRecorder:Recorder,navigator:{mediaDevices:{getUserMedia:async()=>mic}},
  recordingGeneration:0,listening:false,recorderStop:null,recorderSubmit:null,audioContext:{createMediaStreamSource:()=>({connect:()=>{},disconnect:()=>{}}),createAnalyser:()=>meter},
- unlockAudio:async()=>{},performance:{now:()=>now},setInterval:fn=>{interval=fn;return 1;},clearInterval:()=>{},
+ requestMedia:async()=>mic,microphoneFailure:error=>{throw error;},unlockAudio:async()=>{},performance:{now:()=>now},setInterval:fn=>{interval=fn;return 1;},clearInterval:()=>{},
  $:()=>({textContent:''}),finishTurnButton:button,callStatus:t=>status.push(t),voiceInputBlocked:false,
  inputLocale:()=> 'pt-BR',lang:'Japonês',headers:async()=>({Authorization:'Bearer test'}),config:()=>({VOICE_ENDPOINT:'https://example.test/voice'}),
  fetch:async(u,o)=>{requests++;assert.equal(o.body.has('language'),false,'no forced Portuguese hint for Japanese speech');return Response.json({text:transcript});},

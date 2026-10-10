@@ -1,7 +1,7 @@
-import {readFileSync} from 'node:fs';
+import {readFileSync, existsSync} from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
-const source=readFileSync(new URL('./ai/index.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
+const source=readFileSync(new URL(existsSync(new URL('./ai/index.ts',import.meta.url))?'./ai/index.ts':'./supabase/functions/il-ai/index.ts',import.meta.url),'utf8').replace(/^import .*;\n/gm,'');
 function setup(responses){let handler,requests=[];vm.runInNewContext(source,{Deno:{env:{get:k=>k==='GROQ_API_KEY'?'mock-key':undefined},serve:f=>handler=f},checkAccess:async()=>({allowed:true,role:'member'}),profileInstructions:()=>'',crypto:{randomUUID:()=> 'mock'},Response,AbortSignal,console:{warn:()=>{},info:()=>{},error:()=>{}},fetch:async(url,options)=>{requests.push(JSON.parse(options.body));const next=responses.shift();if(next instanceof Error)throw next;assert(next,'no unexpected extra upstream attempts');return next;}});return {handler,requests};}
 const success=()=>Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({segments:[{locale:'ja-JP',text:'はい、元気です。あなたは？'}]})}}]});
 const rate=(wait)=>Response.json({error:{code:'rate_limit_exceeded',message:'Rate limit'}},{status:429,headers:{'retry-after':String(wait)}});

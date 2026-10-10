@@ -33,7 +33,8 @@ Deno.serve(async(req)=>{
   const turnInstructions=voiceTurn ? " CONVERSA DE VOZ: no máximo 45 palavras e 3 segmentos, uma ou duas frases. Responda ao assunto e permita continuar. Sem listas ou apresentações. Explicações longas em etapas se solicitadas." : "";
   const speechSchema={type:"json_schema",json_schema:{name:"mioko_speech",strict:true,schema:{type:"object",properties:{segments:{type:"array",items:{type:"object",properties:{locale:{type:"string",enum:["pt-BR","ja-JP","en-US","es-ES","fr-FR","ko-KR","it-IT"]},text:{type:"string"}},required:["locale","text"],additionalProperties:false}}},required:["segments"],additionalProperties:false}}};
   const biography=/(ildebrando|criador|criou|creator|開発者|作者)/i.test(m)?profileInstructions(access.role==="admin"):(access.role==="admin"?" O aluno autenticado é Professor Ildebrando Leandro, criador do IL Talk Mioko.":"");
-  const messages=[{role:"system",content:instructions+levelInstructions+lessonInstructions+speechFormat+biography+turnInstructions},...h,{role:"user",content:m}];
+  const humorInstructions=b.humorous_conversation===true ? " HUMOR: reaja com uma risada curta e carinhosa quando houver uma piada, brincadeira ou engano divertido que o aluno trate com humor. Use uma forma pronunciável, como Ha, ha!, no idioma da resposta. Não escreva kkk, emojis ou instruções de palco para a voz. Não ria de dúvidas, erros comuns de pronúncia, assuntos sérios ou situações constrangedoras. Não force risadas nem repita em toda resposta." : "";
+  const messages=[{role:"system",content:instructions+levelInstructions+lessonInstructions+speechFormat+biography+turnInstructions+humorInstructions},...h,{role:"user",content:m}];
   const models=[...new Set([model,"openai/gpt-oss-120b","openai/gpt-oss-20b"])];
   const locales=new Set(["pt-BR","ja-JP","en-US","es-ES","fr-FR","ko-KR","it-IT"]);
   let retryAfter=Infinity, sawLimit=false, lastError="Serviço de IA indisponível", lastStage="groq", lastCode;

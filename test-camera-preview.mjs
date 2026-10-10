@@ -13,7 +13,7 @@ const element=selector=>{
 let requested, greeting=0, stopped=0, mode='success';
 const media={getTracks:()=>[{stop:()=>{stopped++;}}]};
 const context=vm.createContext({
-  callMode:null,conversationGeneration:0,voiceInputBlocked:false,stream:null,$:element,
+  window:{},callMode:null,conversationGeneration:0,voiceInputBlocked:false,stream:null,$:element,
   navigator:{mediaDevices:{getUserMedia:async constraints=>{
     requested=constraints;
     if(mode==='denied')throw Object.assign(Error('Permission denied'),{name:'NotAllowedError'});

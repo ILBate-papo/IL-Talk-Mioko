@@ -35,7 +35,13 @@
   let pendingMediaRequests = 0;
   async function requestMedia(constraints) {
     pendingMediaRequests++;
-    try { return await navigator.mediaDevices.getUserMedia(constraints); }
+    try {
+      if (window.MiokoNativeMicrophone && constraints.audio && !constraints.video) {
+        // Native Android capture requests permission itself; do not open a competing WebView capture.
+        return {getTracks: () => []};
+      }
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    }
     finally { pendingMediaRequests--; }
   }
   function handleMediaPageHide(event) {
@@ -831,6 +837,7 @@
           teaching_mode: beginnerLesson() ? "foreign_beginner_pt" : lessonLevel === "intermediate" ? "foreign_intermediate" : "conversation",
           learner_level: lessonLevel,
           voice_conversation: !!callMode,
+          humorous_conversation: !!window.MiokoNativeMicrophone,
           language: lang,
           history: history.slice(0, -1).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
         })
@@ -1018,6 +1025,62 @@
     };
   }
 
+  async function startNativeListening() {
+    const token = ++recordingGeneration;
+    listening = true;
+    callStatus("Abrindo o microfone do Android…");
+    const detector = createTurnDetector();
+    let heard = false, submitted = false, waitingForMicrophone = true;
+    pendingMediaRequests++;
+    const releasePermissionWait = () => { if (waitingForMicrophone) { waitingForMicrophone = false; pendingMediaRequests--; } };
+    const finish = () => {
+      if (submitted) return;
+      submitted = true;
+      clearTimeout(deadline);
+      window.MiokoNativeMicrophone.finish();
+    };
+    let deadline = setTimeout(() => { releasePermissionWait(); window.MiokoNativeMicrophone.cancel(); }, 60000);
+    recorderStop = () => { releasePermissionWait(); clearTimeout(deadline); window.MiokoNativeMicrophone.cancel(); };
+    recorderSubmit = () => { heard = true; finish(); };
+    finishTurnButton.hidden = true;
+    try {
+      const blob = await window.MiokoNativeMicrophone.start(level => {
+        if (token !== recordingGeneration || submitted) return;
+        if (waitingForMicrophone) { releasePermissionWait(); clearTimeout(deadline); deadline = setTimeout(finish, 20000); finishTurnButton.hidden = false; }
+        const turn = detector(level, performance.now());
+        heard = turn.heard;
+        callStatus("Ouvindo você — faça uma pausa quando terminar.");
+        $("#mic").textContent = "🎙️ Ouvindo pelo microfone do Android…";
+        if (turn.finished) finish();
+      });
+      releasePermissionWait(); clearTimeout(deadline);
+      if (token !== recordingGeneration) return;
+      recorderStop = recorderSubmit = null;
+      finishTurnButton.hidden = true;
+      if (!blob || !heard) { listening = false; resumeListening(500); return; }
+      callStatus("Entendendo sua fala…");
+      const form = new FormData();
+      form.append("file", blob, "fala.m4a");
+      const h = await headers(); delete h["Content-Type"];
+      const response = await fetch(config().VOICE_ENDPOINT, {
+        method: "POST", headers: h, body: form, signal: AbortSignal.timeout(30000)
+      });
+      const data = await response.json();
+      if (token !== recordingGeneration) return;
+      if (!response.ok) throw Error(data.error || "Falha ao entender a fala");
+      listening = false;
+      if (data.text?.trim()) send(data.text);
+      else resumeListening(1000);
+    } catch (error) {
+      releasePermissionWait(); clearTimeout(deadline);
+      if (token !== recordingGeneration) return;
+      listening = false;
+      recorderStop = recorderSubmit = null;
+      finishTurnButton.hidden = true;
+      microphoneFailure(error);
+    }
+  }
+
   async function startRecordedListening() {
     if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) {
       voiceInputBlocked = true;
@@ -1113,6 +1176,7 @@
       replyPending || voiceInputBlocked || micPaused || Date.now() < aiCooldownUntil
     ) return;
 
+    if (window.MiokoNativeMicrophone) { startNativeListening(); return; }
     if (!SR || useRecorder || (lang !== "Português" && window.MediaRecorder)) { startRecordedListening(); return; }
     const r = new SR();
     recognition = r;

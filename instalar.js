@@ -11,8 +11,8 @@
     title.textContent = 'Leve a Mioko no seu celular';
     title.style.cssText = 'display:block;font-size:18px;margin-bottom:12px';
     const download = document.createElement('a');
-    download.href = 'downloads/IL-Talk-Mioko-1.0.2.apk';
-    download.download = 'IL-Talk-Mioko-1.0.2.apk';
+    download.href = 'downloads/IL-Talk-Mioko-1.0.3.apk';
+    download.download = 'IL-Talk-Mioko-1.0.3.apk';
     download.textContent = '⬇ Baixar aplicativo Android (APK)';
     download.style.cssText = 'display:block;padding:14px 18px;border-radius:12px;background:#79e3cd;color:#10293a;text-decoration:none;font-weight:700';
     const note = document.createElement('p');

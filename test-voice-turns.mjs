@@ -52,3 +52,10 @@ for(const language of ['Português','Japonês','Inglês','Espanhol','Francês','
   }
 }
 console.log('Passed: beginner, intermediate and advanced instructions across all seven courses.');
+
+await handler(new Request('https://example.test/il-ai',{method:'POST',body:JSON.stringify({message:'Contei uma piada',language:'Português',voice_conversation:true,humorous_conversation:true})}));
+assert.match(requestBody.messages[0].content,/HUMOR:/);
+assert.match(requestBody.messages[0].content,/Não force risadas/);
+await handler(new Request('https://example.test/il-ai',{method:'POST',body:JSON.stringify({message:'Olá',language:'Português',voice_conversation:true})}));
+assert.equal(requestBody.messages[0].content.includes('HUMOR:'),false);
+console.log('Passed: opt-in humorous conversations and unchanged default prompt.');
