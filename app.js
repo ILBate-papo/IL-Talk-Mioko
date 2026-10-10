@@ -602,10 +602,10 @@
       if (generation !== voiceGeneration) return;
       speechPending = false;
       closeMouth();
-      voiceInputBlocked = true;
       const notice = "Não consegui iniciar a voz: " + e.message + ". Confira o volume de mídia e a voz instalada no Android.";
       turnStatus.textContent = notice;
       add("ai", notice + " A conversa por texto continua disponível.");
+      resumeListening();
     }
   }
 

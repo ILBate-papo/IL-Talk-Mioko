@@ -68,13 +68,17 @@ const failed=vm.createContext({
   voice:true,cleanSpeech:t=>t,voiceGeneration:2,speechPending:false,voiceInputBlocked:false,
   stopListening:()=>{},stopSpeech:()=>{},closeMouth:()=>{},
   callStatus:s=>status.push(s),turnStatus:{textContent:''},add:(_,s)=>notices.push(s),
+  resumeListening:()=>{resumed++;},
   nativeSay:async()=>{throw Error('Voz Android indisponível');}
 });
 vm.runInContext(source.slice(sayStart,sayEnd),failed);
+const resumedBeforeFailure=resumed;
 await vm.runInContext('say("Olá")',failed);
 assert.deepEqual(status,['Preparando a voz…'],'pending synthesis must not claim that speech has started');
 assert.match(failed.turnStatus.textContent,/Voz Android indisponível/,'voice failure is visible beside the portrait');
 assert.equal(failed.speechPending,false);
-assert.equal(failed.voiceInputBlocked,true,'failed audio does not restart an unheard voice conversation');
+assert.equal(failed.voiceInputBlocked,false,'speaker failure must not block the microphone');
+assert.equal(resumed,resumedBeforeFailure+1,'microphone listening resumes after a speaker failure');
 assert.equal(notices.length,1);
 console.log('Passed: installed voice preference, visible voice errors and no false speaking status.');
+
