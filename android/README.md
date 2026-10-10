@@ -4,7 +4,7 @@ Aplicativo Android nativo que abre exclusivamente o IL Talk Mioko em uma WebView
 
 - Pacote: `com.iltalk.mioko`
 - Android mínimo: 8.0 (API 26)
-- Versão: 1.0.0 (código 1)
+- Versão: 1.0.1 (código 2)
 - A voz usa os idiomas disponíveis no mecanismo de texto para fala do aparelho. Câmera e microfone pedem permissão quando utilizados.
 - A câmera mostra a prévia do usuário; o serviço atual não recebe imagens do vídeo.
 - O APK é o instalador para download direto. O AAB é o pacote para envio à Google Play.
@@ -22,5 +22,9 @@ Saídas: `app/build/outputs/apk/release/app-release.apk` e `app/build/outputs/bu
 Guarde a assinatura original para atualizações futuras. Incremente `versionCode` e `versionName` ao publicar uma atualização.
 
 ## Validação no aparelho
+
+A versão 1.0.1 deixa de encerrar a conversa quando o diálogo Android de
+permissão pausa a Activity. A interrupção de mídia ocorre apenas ao sair
+realmente do aplicativo, sem pedido de permissão ou seletor de arquivo pendente.
 
 Instale o APK e teste login, bloqueio de contas sem assinatura, texto, câmera, microfone e a voz em cada idioma instalado no Android. Validação de compilação e assinatura não substitui teste de áudio e câmera em um aparelho físico.

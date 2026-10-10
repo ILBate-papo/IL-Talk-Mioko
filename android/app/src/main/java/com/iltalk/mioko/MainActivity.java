@@ -68,7 +68,7 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " ILTalkMioko/1.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " ILTalkMioko/1.0.1");
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
         try (java.io.InputStream input = getAssets().open("native-voice.js"); java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
             byte[] buffer = new byte[4096]; int count;
@@ -203,11 +203,15 @@ public class MainActivity extends Activity {
     // This override serves Android 8 through 12 only.
     @android.annotation.SuppressLint("GestureBackNavigation")
     @Override public void onBackPressed() { navigateBack(); }
-    @Override protected void onPause() {
+    // Android permission dialogs pause the Activity without hiding the page.
+    // Do not synthesize pagehide or pause WebView here: that cancels getUserMedia
+    // while the user is granting microphone/camera access.
+    @Override protected void onStop() {
+        super.onStop();
+        if (pendingPermission != null || pendingFile != null) return;
         if (trustedPage()) web.evaluateJavascript("window.dispatchEvent(new Event('pagehide'));", null);
         if (tts != null) tts.stop();
-        web.onPause();
-        super.onPause();
+        if (web != null) web.onPause();
     }
     @Override protected void onResume() { super.onResume(); if (web != null) web.onResume(); }
     @Override protected void onDestroy() {
