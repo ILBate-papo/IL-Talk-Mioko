@@ -48,7 +48,7 @@
   const status=node('p',null,'commerceStatus');status.setAttribute('role','status');
   box.append(node('h2','Comece a conversar com a Mioko'),node('p','Crie sua conta, confirme o e-mail e pague para liberar seu acesso.'));
   const billing=node('div');box.append(billing);
-  card.append(box);
+  card.insertBefore(box,document.getElementById("miokoPublicInfo"));
   call('il-public',{action:'settings'}).then(cfg=>{
     const price=node('p',money(cfg.price_cents),'price');
     const duration=node('p','Pagamento único para '+cfg.access_days+' dias de acesso. Para renovar, faça um novo pagamento.','subtle');

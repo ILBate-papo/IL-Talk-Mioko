@@ -1,6 +1,6 @@
 // Payment, leads and access statistics for IL Talk Mioko.
 {
- const script=document.createElement("script");script.src="business.js?v=20261009-preco100";document.head.appendChild(script);
+ const script=document.createElement("script");script.src="business.js?v=20261009-seo1";document.head.appendChild(script);
  const style=document.createElement("link");style.rel="stylesheet";style.href="business.css?v=20261009-1";document.head.appendChild(style);
 }
 // Download the signed Android app from the public login page.
