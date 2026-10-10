@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="630" viewBox="0 0 1200 630">
+<defs><linearGradient id="bg" x1="0" x2="1"><stop stop-color="#071222"/><stop offset="1" stop-color="#16354a"/></linearGradient></defs>
+<rect width="1200" height="630" fill="url(#bg)"/>
+<rect x="56" y="58" width="68" height="6" rx="3" fill="#83e6cf"/>
+<g font-family="DejaVu Sans" fill="#ffffff">
+<text x="56" y="151" font-size="56" font-weight="bold">IL Talk Mioko</text>
+<text x="56" y="216" font-size="32" fill="#83e6cf">Aprenda 7 idiomas</text>
+<text x="56" y="294" font-size="23">Professora virtual • voz e texto</text>
+<text x="56" y="335" font-size="23">Explicações em português</text>
+<text x="56" y="376" font-size="23">Do início à conversação avançada</text>
+<text x="56" y="453" font-size="19" fill="#cbd8e7">Japonês · Inglês · Espanhol · Francês</text>
+<text x="56" y="486" font-size="19" fill="#cbd8e7">Coreano · Italiano · Português</text>
+<text x="56" y="577" font-size="19" fill="#83e6cf">Professor Ildebrando Leandro</text>
+</g>
+<image x="780" y="0" width="420" height="630" preserveAspectRatio="xMidYMid meet" xlink:href="mioko-compartilhar.png"/>
+</svg>
