@@ -26,13 +26,13 @@ let handler, requestBody, paid=true, upstreamCalls=0;
 vm.runInNewContext(edge,{
   Deno:{env:{get:key=>key==='GROQ_API_KEY'?'test-key':undefined},serve:fn=>{handler=fn;}},
   checkAccess:async()=>paid?{allowed:true,role:'member'}:{allowed:false,status:403,reason:'Pagamento necessário'},
-  profileInstructions:()=>'',crypto:{randomUUID:()=> 'test'},Response,AbortSignal,console,
+  profileInstructions:()=>'',crypto:{randomUUID:()=> 'test'},Response,AbortSignal,console:{error:()=>{},warn:()=>{},info:()=>{}},
   fetch:async(url,options)=>{upstreamCalls++;requestBody=JSON.parse(options.body);return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({segments:[{locale:'pt-BR',text:'Olá! Como posso ajudar?'}]})}}]});}
 });
 const req=voice=>new Request('https://example.test/il-ai',{method:'POST',body:JSON.stringify({message:'Olá',language:'Português',voice_conversation:voice,history:Array.from({length:20},(_,i)=>({role:i%2?'assistant':'user',content:'Turno '+i}))})});
 assert.equal((await handler(req(true))).status,200);
 assert.equal(requestBody.max_tokens,400);
-assert.equal(requestBody.messages.length,10);
+assert.equal(requestBody.messages.length,6);
 assert.match(requestBody.messages[0].content,/no máximo 45 palavras/);
 assert.equal((await handler(req(false))).status,200);
 assert.equal(requestBody.max_tokens,1200);

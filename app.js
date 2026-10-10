@@ -76,6 +76,7 @@
   let listening = false;
   let voiceInputBlocked = false;
   let aiCooldownUntil = 0;
+  let cooldownTicker = null;
   let micPaused = false;
   let replyPending = false;
   let speechPending = false;
@@ -204,6 +205,17 @@
       try { old.abort(); } catch {}
     }
     $("#mic").textContent = "🎙️ Microfone opcional";
+  }
+
+  function showCooldown(seconds) {
+    aiCooldownUntil = Date.now() + Math.max(1, seconds) * 1000;
+    clearInterval(cooldownTicker);
+    const refresh = () => {
+      const remaining = Math.ceil((aiCooldownUntil - Date.now()) / 1000);
+      if (remaining > 0) callStatus("O serviço está no limite de uso. Nova tentativa disponível em " + remaining + " segundos.");
+      else { clearInterval(cooldownTicker); cooldownTicker = null; callStatus("Pode falar novamente."); resumeListening(); }
+    };
+    refresh(); cooldownTicker = setInterval(refresh, 1000);
   }
 
   function resumeListening(delay = 400) {
@@ -803,9 +815,9 @@
         : quota ? "O serviço de IA está sem cota. O administrador precisa verificar a conta."
         : limited ? "Serviço temporariamente ocupado. Aguarde " + Math.ceil(e.retryAfter || 60) + " segundos para falar novamente."
         : "Não consegui responder. Toque em Microfone para tentar novamente.";
-      if (limited && !quota) aiCooldownUntil = Date.now() + Math.max(1, e.retryAfter || 60) * 1000;
+      if (limited && !quota) showCooldown(e.retryAfter || 60);
       else voiceInputBlocked = true;
-      callStatus(notice);
+      if (!limited || quota) callStatus(notice);
       add("ai", notice + (!limited && !quota ? " Detalhe: " + e.message : ""));
     } finally {
       clearTimeout(timeout);

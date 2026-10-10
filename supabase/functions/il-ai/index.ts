@@ -1,6 +1,7 @@
 import {checkAccess} from "./access.ts";
 import {profileInstructions} from "./profile.ts";
 const cors={"Access-Control-Allow-Origin":"https://ilbate-papo.github.io","Access-Control-Allow-Headers":"authorization, x-client-info, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS","Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","Vary":"Origin"};
+const modelCooldowns=new Map();
 Deno.serve(async(req)=>{
  const id=crypto.randomUUID();let key="";
  const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:cors});
@@ -18,7 +19,7 @@ Deno.serve(async(req)=>{
   if(!m||m.length>6000)return fail("message deve conter de 1 a 6000 caracteres",400,"request");
   if(b.history!==undefined&&!Array.isArray(b.history))return fail("history deve ser uma lista",400,"request");
   const voiceTurn=b.voice_conversation===true;
-  const h=(b.history||[]).slice(voiceTurn?-8:-30).filter(x=>x&&(x.role==="user"||x.role==="assistant")&&typeof x.content==="string"&&x.content.trim()).map(x=>({role:x.role,content:x.content.slice(0,6000)}));
+  const h=(b.history||[]).slice(voiceTurn?-4:-30).filter(x=>x&&(x.role==="user"||x.role==="assistant")&&typeof x.content==="string"&&x.content.trim()).map(x=>({role:x.role,content:x.content.slice(voiceTurn?-360:0,voiceTurn?undefined:6000)}));
   if(h.at(-1)?.role==="user"&&h.at(-1)?.content.trim()===m)h.pop();
   key=Deno.env.get("GROQ_API_KEY")||"";if(!key)return fail("GROQ_API_KEY não configurada no Supabase",503,"configuration");
   const language=typeof b.language==="string"?b.language.slice(0,80):"Japonês";
@@ -30,23 +31,44 @@ Deno.serve(async(req)=>{
   const lessonInstructions=beginnerSupport ? " INICIANTE: quando a pergunta for em português, explique em português brasileiro. Só fale um exemplo no idioma estudado quando o aluno pedir uma frase, tradução, como se fala algo ou exercício. Perguntas no idioma estudado recebem resposta simples nesse idioma, mesmo no iniciante. Não repita exemplos automaticamente." : "";
   const speechFormat=" Return only JSON {\"segments\":[{\"locale\":\"pt-BR\",\"text\":\"texto\"}]}. Each segment contains ONE language, labeled with its correct locale: pt-BR, ja-JP, en-US, es-ES, fr-FR, ko-KR, it-IT. Separate foreign examples from Portuguese explanations. Japanese text must use correct kana/kanji. No romanization or Portuguese phonetic spelling. Segment text is displayed and spoken.";
   const turnInstructions=voiceTurn ? " CONVERSA DE VOZ: no máximo 45 palavras e 3 segmentos, uma ou duas frases. Responda ao assunto e permita continuar. Sem listas ou apresentações. Explicações longas em etapas se solicitadas." : "";
-  const responseFormat=["qwen/qwen3.8-27b","openai/gpt-oss-20b","openai/gpt-oss-120b"].includes(model)?{type:"json_schema",json_schema:{name:"mioko_speech",strict:true,schema:{type:"object",properties:{segments:{type:"array",items:{type:"object",properties:{locale:{type:"string",enum:["pt-BR","ja-JP","en-US","es-ES","fr-FR","ko-KR","it-IT"]},text:{type:"string"}},required:["locale","text"],additionalProperties:false}}},required:["segments"],additionalProperties:false}}}:{type:"json_object"};
-  const r=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{Authorization:"Bearer "+key,"Content-Type":"application/json"},signal:AbortSignal.timeout(45000),body:JSON.stringify({model,messages:[{role:"system",content:instructions+levelInstructions+lessonInstructions+speechFormat+" "+profileInstructions(access.role==="admin")+turnInstructions},...h,{role:"user",content:m}],reasoning_effort:"none",response_format:responseFormat,max_tokens:voiceTurn?400:1200})});
-  const rawResponse=await r.text();let d;try{d=JSON.parse(rawResponse)}catch{return fail("Groq HTTP "+r.status+": resposta não JSON",502,"groq")}
-  if(!r.ok){
-   const duration=String(d?.error?.message||"").match(/try again in ([0-9.hms ]+)/i)?.[1]||"";
-   const seconds=[...duration.matchAll(/([0-9.]+)\s*(h|ms|m|s)/g)].reduce((n,x)=>n+Number(x[1])*(x[2]==="h"?3600:x[2]==="m"?60:x[2]==="ms"?.001:1),0);
-   const retryAfter=r.status===429?Math.ceil(Number(r.headers.get("retry-after"))||seconds||60):undefined;
-   return fail("Groq HTTP "+r.status+": "+(d?.error?.message||rawResponse),r.status===429?429:502,"groq",d?.error?.code,retryAfter);
-  }
-  const choice=d.choices?.[0];
-  if(choice?.finish_reason==="length")return fail("Groq atingiu o limite de resposta; tente uma pergunta mais curta",502,"groq");
-  const answer=choice?.message?.content;
-  if(typeof answer!=="string"||!answer.trim())return fail("Groq respondeu sem texto",502,"groq");
-  let spoken;try{spoken=JSON.parse(answer.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,""))}catch{return fail("A resposta não veio no formato de fala. Tente novamente.",502,"speech_format")};
+  const speechSchema={type:"json_schema",json_schema:{name:"mioko_speech",strict:true,schema:{type:"object",properties:{segments:{type:"array",items:{type:"object",properties:{locale:{type:"string",enum:["pt-BR","ja-JP","en-US","es-ES","fr-FR","ko-KR","it-IT"]},text:{type:"string"}},required:["locale","text"],additionalProperties:false}}},required:["segments"],additionalProperties:false}}};
+  const biography=/(ildebrando|criador|criou|creator|開発者|作者)/i.test(m)?profileInstructions(access.role==="admin"):(access.role==="admin"?" O aluno autenticado é Professor Ildebrando Leandro, criador do IL Talk Mioko.":"");
+  const messages=[{role:"system",content:instructions+levelInstructions+lessonInstructions+speechFormat+biography+turnInstructions},...h,{role:"user",content:m}];
+  const models=[...new Set([model,"openai/gpt-oss-120b","openai/gpt-oss-20b"])];
   const locales=new Set(["pt-BR","ja-JP","en-US","es-ES","fr-FR","ko-KR","it-IT"]);
-  if(!Array.isArray(spoken?.segments)||!spoken.segments.length||spoken.segments.length>50||spoken.segments.some(x=>!x||!locales.has(x.locale)||typeof x.text!=="string"||!x.text.trim()||x.text.length>6000))return fail("A resposta veio com trechos de fala inválidos. Tente novamente.",502,"speech_format");
-  const segments=spoken.segments.map(x=>({locale:x.locale,text:x.text.trim()}));
-  return json({answer:segments.map(x=>x.text).join("\n"),speech_segments:segments,model,provider:"groq",contract:"mioko-groq-v2-segments",request_id:id});
+  let retryAfter=Infinity, sawLimit=false, lastError="Serviço de IA indisponível", lastStage="groq", lastCode;
+  for(const candidate of models){
+   const cooldown=modelCooldowns.get(candidate)||0;
+   if(cooldown>Date.now()){sawLimit=true;retryAfter=Math.min(retryAfter,Math.ceil((cooldown-Date.now())/1000));continue;}
+   try{
+    const strict=["qwen/qwen3.8-27b","openai/gpt-oss-20b","openai/gpt-oss-120b"].includes(candidate);
+    const oss=candidate.startsWith("openai/gpt-oss-");
+    const r=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{Authorization:"Bearer "+key,"Content-Type":"application/json"},signal:AbortSignal.timeout(voiceTurn?6000:20000),body:JSON.stringify({model:candidate,messages,reasoning_effort:oss?"low":"none",response_format:strict?speechSchema:{type:"json_object"},max_tokens:voiceTurn?(oss?1000:400):1200})});
+    const rawResponse=await r.text();let d;try{d=JSON.parse(rawResponse)}catch{lastError="Resposta inválida do serviço";continue;}
+    if(!r.ok){
+     lastCode=d?.error?.code;lastError="Groq HTTP "+r.status+": "+(d?.error?.message||"Falha");
+     console.warn(JSON.stringify({request_id:id,model:candidate,status:r.status,code:lastCode,remaining_tokens:r.headers.get("x-ratelimit-remaining-tokens"),remaining_requests:r.headers.get("x-ratelimit-remaining-requests")}));
+     if(r.status===429){
+      const duration=String(d?.error?.message||"").match(/try again in ([0-9.hms ]+)/i)?.[1]||"";
+      const seconds=[...duration.matchAll(/([0-9.]+)\s*(h|ms|m|s)/g)].reduce((n,x)=>n+Number(x[1])*(x[2]==="h"?3600:x[2]==="m"?60:x[2]==="ms"?.001:1),0);
+      const wait=Math.ceil(Number(r.headers.get("retry-after"))||seconds||60);
+      modelCooldowns.set(candidate,Date.now()+wait*1000);retryAfter=Math.min(retryAfter,wait);sawLimit=true;continue;
+     }
+     if([401,403].includes(r.status))return fail(lastError,502,"groq",lastCode);
+     continue;
+    }
+    const choice=d.choices?.[0];
+    if(choice?.finish_reason==="length"){lastError="O modelo não concluiu a resposta";lastCode="response_length";continue;}
+    const answer=choice?.message?.content;
+    if(typeof answer!=="string"||!answer.trim()){lastError="O modelo respondeu sem texto";continue;}
+    let spoken;try{spoken=JSON.parse(answer.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/, ""));}catch{lastError="Resposta fora do formato de fala";lastStage="speech_format";continue;}
+    if(!Array.isArray(spoken?.segments)||!spoken.segments.length||spoken.segments.length>50||spoken.segments.some(x=>!x||!locales.has(x.locale)||typeof x.text!=="string"||!x.text.trim()||x.text.length>6000)){lastError="Trechos de fala inválidos";lastStage="speech_format";continue;}
+    const segments=spoken.segments.map(x=>({locale:x.locale,text:x.text.trim()}));
+    console.info(JSON.stringify({request_id:id,model:candidate,status:200,fallback:candidate!==model}));
+    return json({answer:segments.map(x=>x.text).join("\n"),speech_segments:segments,model:candidate,provider:"groq",contract:"mioko-groq-v2-segments",request_id:id});
+   }catch(e){lastError=e?.name==="TimeoutError"||e?.name==="AbortError"?"Modelo demorou a responder":String(e?.message||e);lastStage="upstream";}
+  }
+  return sawLimit?fail("Todos os modelos disponíveis estão temporariamente limitados",429,"groq","rate_limit_exceeded",Number.isFinite(retryAfter)?retryAfter:60):fail(lastError,502,lastStage,lastCode);
+
  }catch(e){const timeout=e?.name==="TimeoutError"||e?.name==="AbortError";return fail(timeout?"Groq excedeu 45 segundos":e?.message||e,timeout?504:502,"upstream")}
 });
