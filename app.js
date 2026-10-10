@@ -225,6 +225,19 @@
     }
   }
 
+  function microphoneFailure(error) {
+    voiceInputBlocked = true;
+    const name = error?.name || "";
+    const message = name === "NotAllowedError" || name === "SecurityError"
+      ? "Microfone sem permissão. No Android, abra Configurações → Aplicativos → IL Talk Mioko → Permissões e permita o microfone. Depois toque em Microfone."
+      : name === "NotReadableError" || name === "AbortError"
+      ? "Não consegui usar o microfone. Feche outros aplicativos que estejam gravando áudio e toque em Microfone para tentar novamente."
+      : "Não consegui abrir o microfone: " + (error?.message || name || "microfone indisponível") + ". Toque em Microfone para tentar novamente.";
+    callStatus(message);
+    $("#mic").textContent = "🎙️ Tentar microfone novamente";
+    add("ai", message);
+  }
+
   function closeMouth() {
     cancelAnimationFrame(audioFrame);
     audioFrame = 0;
@@ -502,7 +515,7 @@
       if (generation === voiceGeneration) {
         speechPending = false;
         closeMouth();
-        callStatus("Fala concluída.");
+        if (!voiceInputBlocked && !micPaused) callStatus("Fala concluída.");
         resumeListening();
       }
     }
@@ -743,8 +756,8 @@
       permission.getTracks().forEach(track => track.stop());
     } catch (e) {
       if (session !== conversationGeneration) return;
-      voiceInputBlocked = true;
-      add("ai", "Permita o microfone para conversar por voz. Toque no botão do microfone para tentar novamente.");
+      microphoneFailure(e);
+      return;
     }
     if (session !== conversationGeneration) return;
     const text = greetingForLesson();
@@ -928,10 +941,10 @@
         // Ask on the call gesture, rather than after the greeting has finished.
         const permission = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
         permission.getTracks().forEach(track => track.stop());
-      } catch {
+      } catch (e) {
         if (session !== conversationGeneration) return;
-        voiceInputBlocked = true;
-        add("ai", "Não consegui acessar o microfone. Permita o microfone nas configurações do site e toque nele para tentar novamente.");
+        microphoneFailure(e);
+        return;
       }
     }
     if (session !== conversationGeneration) return;
@@ -986,7 +999,9 @@
   async function startRecordedListening() {
     if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) {
       voiceInputBlocked = true;
-      add("ai", "Este navegador não permite gravar o microfone. Use Chrome ou Edge.");
+      const notice = "Este aplicativo não disponibilizou a gravação do microfone. Atualize o Android System WebView e abra o aplicativo novamente.";
+      callStatus(notice);
+      add("ai", notice);
       return;
     }
     const token = ++recordingGeneration;
@@ -1060,15 +1075,18 @@
     } catch(e) {
       cleanup();
       if(token !== recordingGeneration) return;
-      listening=false; recorderStop=null; voiceInputBlocked=true;
-      callStatus("Não consegui abrir o microfone. Toque em Microfone para tentar novamente.");
-      add("ai","Não consegui abrir o microfone: " + e.message);
+      listening=false; recorderStop=null;
+      microphoneFailure(e);
     }
   }
 
   function startListening() {
+    if (!window.MiokoAuth?.hasAccess()) {
+      callStatus("Sua sessão não liberou a conversa. Saia e entre novamente para usar o microfone.");
+      return;
+    }
     if (
-      !window.MiokoAuth?.hasAccess() || !callMode || recognition || listening ||
+      !callMode || recognition || listening ||
       currentAudio || nativeUtterance || speechPending ||
       replyPending || voiceInputBlocked || micPaused || Date.now() < aiCooldownUntil
     ) return;

@@ -14,7 +14,7 @@ const context=vm.createContext({
   SpeechSynthesisUtterance:class{constructor(text){this.text=text;}},
   spokenLocale:()=> 'pt-BR',voiceGeneration:1,voice:true,
   locales:{Português:'pt-BR',Japonês:'ja-JP',Inglês:'en-US',Espanhol:'es-ES',Francês:'fr-FR',Coreano:'ko-KR',Italiano:'it-IT'},cleanSpeech:t=>t,
-  nativeUtterance:null,nativeCancel:null,audioFrame:0,speechPending:true,
+  nativeUtterance:null,nativeCancel:null,audioFrame:0,speechPending:true,voiceInputBlocked:false,micPaused:false,
   closeMouth:()=>{},callStatus:()=>{},resumeListening:()=>{resumed++;},
   $:()=>({classList:{add:()=>{},remove:()=>{}}}),
   requestAnimationFrame:()=>0,performance,setTimeout,clearTimeout,queueMicrotask
@@ -82,3 +82,19 @@ assert.equal(resumed,resumedBeforeFailure+1,'microphone listening resumes after 
 assert.equal(notices.length,1);
 console.log('Passed: installed voice preference, visible voice errors and no false speaking status.');
 
+const micStatus=[], micButton={textContent:''};
+const micContext=vm.createContext({voiceInputBlocked:false,callStatus:s=>micStatus.push(s),$:()=>micButton,add:()=>{}});
+const micStart=source.indexOf('  function microphoneFailure(');
+const micEnd=source.indexOf('  function closeMouth(',micStart);
+vm.runInContext(source.slice(micStart,micEnd),micContext);
+vm.runInContext('microphoneFailure({name:"NotAllowedError"})',micContext);
+assert.match(micStatus.at(-1),/Permissões/,'Android permission failure is visible beside the portrait');
+assert.equal(micContext.voiceInputBlocked,true);
+vm.runInContext('microphoneFailure({name:"NotReadableError"})',micContext);
+assert.match(micStatus.at(-1),/gravando áudio/,'busy microphone gets a distinct recovery message');
+const completionStatuses=[];
+context.callStatus=s=>completionStatuses.push(s);
+context.voiceInputBlocked=true;
+await vm.runInContext('nativeSay("Olá",1)',context);
+assert(!completionStatuses.includes('Fala concluída.'),'speech completion must not hide a microphone failure');
+console.log('Passed: visible permission/busy microphone failures and preservation of microphone notices.');
