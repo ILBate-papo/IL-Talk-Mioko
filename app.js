@@ -118,7 +118,7 @@
     else if (recognition) { try { recognition.stop(); } catch {} }
   };
   $("#miokoVideo").append(finishTurnButton);
-  const callStatus = text => { turnStatus.textContent = callMode ? text : ""; };
+  const callStatus = text => { turnStatus.textContent = text; };
 
   function voiceLabel() {
     $("#voice").textContent =
@@ -345,7 +345,11 @@
     const code = requestedLocale.toLowerCase();
     const exact = voices.filter(v => v.lang.replace("_", "-").toLowerCase() === code);
     const compatible = voices.filter(v => v.lang.toLowerCase().split("-")[0] === code.split("-")[0]);
-    const candidates = exact.length ? exact : compatible;
+    const matching = exact.length ? exact : compatible;
+    // Android lists network voices alongside installed voices. Prefer an
+    // installed voice so a stalled network engine cannot silence the lesson.
+    const installed = matching.filter(v => v.localService);
+    const candidates = installed.length ? installed : matching;
     return candidates.find(v => /female|feminina|maria|francisca|luciana|victoria|vitoria|vitória|samantha|zira|kyoko|haruka|nanami|yuna|heami|amelie|audrey|monica|paulina|elsa|isabella/i.test(v.name)) || candidates[0] || null;
   }
 
@@ -360,7 +364,7 @@
         resolve();
       };
       synth.addEventListener("voiceschanged", finish);
-      timer = setTimeout(finish, 1000);
+      timer = setTimeout(finish, window.__miokoNativeInstalled ? 5000 : 1000);
     });
   }
 
@@ -447,7 +451,7 @@
             synth.cancel();
           };
           deadline = setTimeout(() => {
-            finish(Error("O aparelho não iniciou a voz. Toque no microfone para continuar."));
+            finish(Error("O aparelho não iniciou a voz. Toque em Testar voz para tentar novamente."));
             synth.cancel();
           }, 8000);
           u.onboundary = e => {
@@ -458,12 +462,13 @@
           u.onstart = () => {
             if (generation !== voiceGeneration || nativeUtterance !== u) return;
             started = performance.now();
+            callStatus("Mioko está falando…");
             closeMouth();
             $("#miokoVideo").classList.add("speaking");
             window.MiokoAvatar?.setMouth(0.45, true);
             clearTimeout(deadline);
             deadline = setTimeout(() => {
-              finish(Error("A voz do aparelho parou de responder. Toque no microfone para continuar."));
+              finish(Error("A voz do aparelho parou de responder. Toque em Testar voz para tentar novamente."));
               synth.cancel();
             }, Math.max(15000, chunk.length * 180));
             function tick(now) {
@@ -497,6 +502,7 @@
       if (generation === voiceGeneration) {
         speechPending = false;
         closeMouth();
+        callStatus("Fala concluída.");
         resumeListening();
       }
     }
@@ -588,7 +594,7 @@
     stopSpeech();
     const generation = voiceGeneration;
     speechPending = true;
-    callStatus("Mioko está falando…");
+    callStatus("Preparando a voz…");
 
     try {
       await nativeSay(text, generation, segments);
@@ -596,10 +602,25 @@
       if (generation !== voiceGeneration) return;
       speechPending = false;
       closeMouth();
-      add("ai", "Voz indisponível: " + e.message + ". A conversa por texto continua disponível.");
-      resumeListening();
+      voiceInputBlocked = true;
+      const notice = "Não consegui iniciar a voz: " + e.message + ". Confira o volume de mídia e a voz instalada no Android.";
+      turnStatus.textContent = notice;
+      add("ai", notice + " A conversa por texto continua disponível.");
     }
   }
+
+  const testVoiceButton = document.createElement("button");
+  testVoiceButton.type = "button";
+  testVoiceButton.className = "nb";
+  testVoiceButton.id = "testMiokoVoice";
+  testVoiceButton.textContent = "🔊 Testar voz";
+  testVoiceButton.onclick = () => {
+    enableVoice();
+    voiceInputBlocked = false;
+    const text = greetingForLesson();
+    say(text, [{text, locale: spokenLocale()}]);
+  };
+  $("#voice").insertAdjacentElement("afterend", testVoiceButton);
 
   $("#enter").onclick = async () => {
     if (!await window.MiokoAuth?.signIn()) return;
@@ -1157,6 +1178,7 @@
   });
   window.addEventListener("pagehide", stopMedia);
 })();
+
 
 
 

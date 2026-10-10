@@ -15,7 +15,7 @@ const context=vm.createContext({
   spokenLocale:()=> 'pt-BR',voiceGeneration:1,voice:true,
   locales:{Português:'pt-BR',Japonês:'ja-JP',Inglês:'en-US',Espanhol:'es-ES',Francês:'fr-FR',Coreano:'ko-KR',Italiano:'it-IT'},cleanSpeech:t=>t,
   nativeUtterance:null,nativeCancel:null,audioFrame:0,speechPending:true,
-  closeMouth:()=>{},resumeListening:()=>{resumed++;},
+  closeMouth:()=>{},callStatus:()=>{},resumeListening:()=>{resumed++;},
   $:()=>({classList:{add:()=>{},remove:()=>{}}}),
   requestAnimationFrame:()=>0,performance,setTimeout,clearTimeout,queueMicrotask
 });
@@ -56,3 +56,25 @@ context.mixedPlan=[{locale:'ja-JP',text:'Em japonês, diga こんにちは。 Ag
 await vm.runInContext('nativeSay("aula",1,mixedPlan)',context);
 assert.deepEqual(spoken.map(x=>x.locale),['pt-BR','ja-JP','pt-BR']);
 console.log('Passed: mislabeled Japanese/Korean script never uses the Portuguese voice; beginner explanation stays Portuguese.');
+
+voices.unshift({name:'Maria online',lang:'pt-BR',localService:false});
+voices.push({name:'Português instalado',lang:'pt-BR',localService:true});
+assert.equal(vm.runInContext('selectNativeVoice("pt-BR").name',context),'Português instalado','installed voice is preferred over network voice');
+assert.equal(vm.runInContext('selectNativeVoice("ja-JP").lang',context),'ja-JP','voice selection preserves the requested language');
+const sayStart=source.indexOf('  async function say(');
+const sayEnd=source.indexOf('  const testVoiceButton',sayStart);
+const status=[], notices=[];
+const failed=vm.createContext({
+  voice:true,cleanSpeech:t=>t,voiceGeneration:2,speechPending:false,voiceInputBlocked:false,
+  stopListening:()=>{},stopSpeech:()=>{},closeMouth:()=>{},
+  callStatus:s=>status.push(s),turnStatus:{textContent:''},add:(_,s)=>notices.push(s),
+  nativeSay:async()=>{throw Error('Voz Android indisponível');}
+});
+vm.runInContext(source.slice(sayStart,sayEnd),failed);
+await vm.runInContext('say("Olá")',failed);
+assert.deepEqual(status,['Preparando a voz…'],'pending synthesis must not claim that speech has started');
+assert.match(failed.turnStatus.textContent,/Voz Android indisponível/,'voice failure is visible beside the portrait');
+assert.equal(failed.speechPending,false);
+assert.equal(failed.voiceInputBlocked,true,'failed audio does not restart an unheard voice conversation');
+assert.equal(notices.length,1);
+console.log('Passed: installed voice preference, visible voice errors and no false speaking status.');
