@@ -33,12 +33,21 @@
   let lang = localStorage.ilLang || "Português";
   const locales = { Português: "pt-BR", Japonês: "ja-JP", Inglês: "en-US", Espanhol: "es-ES", Francês: "fr-FR", Coreano: "ko-KR", Italiano: "it-IT" };
   const locale = () => locales[lang] || "pt-BR";
-  let beginnerSupport = localStorage.ilBeginnerSupport !== "off";
-  const beginnerLesson = () => lang !== "Português" && !!locales[lang] && beginnerSupport;
+  const legacyAdvancedLanguage = localStorage.ilBeginnerSupport === "off" ? lang : null;
+  const levelStorageKey = () => "ilMiokoCourseLevels:" + (window.MiokoAuth?.userId() || "guest");
+  function readCourseLevel() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(levelStorageKey()) || "{}")[lang];
+      if (["beginner", "intermediate", "advanced"].includes(saved)) return saved;
+    } catch {}
+    return lang === legacyAdvancedLanguage ? "advanced" : "beginner";
+  }
+  let lessonLevel = readCourseLevel();
+  const beginnerLesson = () => lang !== "Português" && !!locales[lang] && lessonLevel === "beginner";
   const inputLocale = () => beginnerLesson() ? "pt-BR" : locale();
   const spokenLocale = () => beginnerLesson() ? "pt-BR" : locale();
   const greetingForLesson = () => beginnerLesson()
-    ? (lang === "Japonês" ? "Olá! Vamos aprender japonês do zero. Vou explicar em português e pronunciar os exemplos em japonês. こんにちは。 Isso significa olá." : "Olá! Vamos aprender " + lang.toLowerCase() + " do zero. Vou explicar em português e usar a voz desse idioma nos exemplos.")
+    ? "Olá! Vamos aprender " + lang.toLowerCase() + ". Vou conversar em português e explicar as frases que você pedir. O que gostaria de aprender?"
     : (greetings[lang] || greetings.Português);
   const greetings = {
     Português: "Olá! Sou a Mioko. O que você gostaria de conversar?",
@@ -86,9 +95,28 @@
   let replyController = null;
   let recognitionFailures = 0;
   let recorderStop = null;
+  let recorderSubmit = null;
   let recordingGeneration = 0;
-  const preferRecorder = !(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const preferRecorder = /Android/i.test(navigator.userAgent || "") || !(window.SpeechRecognition || window.webkitSpeechRecognition);
   let useRecorder = preferRecorder;
+
+  // Keep the current turn visible beside Mioko, even when the tools are below the screen.
+  const turnStatus = document.createElement("span");
+  turnStatus.id = "miokoTurnStatus";
+  turnStatus.setAttribute("role", "status");
+  turnStatus.style.cssText = "display:block;color:#9fe9d5;font-size:14px;padding:8px 4px;text-align:center";
+  $("#miokoVideo").append(turnStatus);
+  const finishTurnButton = document.createElement("button");
+  finishTurnButton.type = "button";
+  finishTurnButton.className = "nb";
+  finishTurnButton.textContent = "Terminei de falar";
+  finishTurnButton.hidden = true;
+  finishTurnButton.onclick = () => {
+    if (recorderSubmit) recorderSubmit();
+    else if (recognition) { try { recognition.stop(); } catch {} }
+  };
+  $("#miokoVideo").append(finishTurnButton);
+  const callStatus = text => { turnStatus.textContent = callMode ? text : ""; };
 
   function voiceLabel() {
     $("#voice").textContent =
@@ -162,6 +190,8 @@
     recordingGeneration++;
     recorderStop?.();
     recorderStop = null;
+    recorderSubmit = null;
+    finishTurnButton.hidden = true;
     listening = false;
     const old = recognition;
     recognition = null;
@@ -234,6 +264,7 @@
 
   function stopMedia() {
     callMode = null;
+    callStatus("");
     micPaused = false;
     conversationGeneration++;
     replyController?.abort();
@@ -544,6 +575,7 @@
     stopSpeech();
     const generation = voiceGeneration;
     speechPending = true;
+    callStatus("Mioko está falando…");
 
     try {
       await nativeSay(text, generation, segments);
@@ -559,6 +591,8 @@
   $("#enter").onclick = async () => {
     if (!await window.MiokoAuth?.signIn()) return;
     loadUserHistory();
+    lessonLevel = readCourseLevel();
+    updateLessonMode();
     $("#login").classList.add("hide");
     $("#app").classList.remove("hide");
     prepareAudio();
@@ -595,24 +629,32 @@
     localStorage.ilLang = lang;
   }
 
-  const beginnerBox = document.createElement("label");
-  const beginnerText = document.createTextNode("");
-  beginnerBox.style.cssText = "display:block;margin:10px 0;font-size:14px";
-  const beginnerToggle = document.createElement("input");
-  beginnerToggle.type = "checkbox"; beginnerToggle.checked = beginnerSupport;
-  beginnerToggle.style.marginRight = "8px";
-  beginnerBox.append(beginnerToggle, beginnerText);
-  $("#status").insertAdjacentElement("afterend", beginnerBox);
+  const levelBox = document.createElement("label");
+  levelBox.style.cssText = "display:block;margin:10px 0;font-size:14px";
+  levelBox.append(document.createTextNode("Seu nível: "));
+  const levelSelect = document.createElement("select");
+  levelSelect.setAttribute("aria-label", "Seu nível no idioma");
+  levelSelect.style.cssText = "padding:9px;border-radius:8px;background:#111b2b;color:#fff;border:1px solid #6684a6;max-width:100%";
+  for (const [value, label] of [["beginner", "Iniciante — apoio em português"], ["intermediate", "Intermediário — prática com apoio"], ["advanced", "Avançado — conversar no idioma"]]) {
+    const option = document.createElement("option");
+    option.value = value; option.textContent = label; levelSelect.append(option);
+  }
+  levelBox.append(levelSelect);
+  $("#status").insertAdjacentElement("afterend", levelBox);
   const updateLessonMode = () => {
-    beginnerBox.hidden = lang === "Português";
-    beginnerText.textContent = lang + " para iniciantes: explicar e escutar em português";
-    $("#status").textContent = beginnerLesson() ? lang + " • iniciante • explicações em português" : lang + " • avaliação adaptativa";
+    levelSelect.value = lessonLevel;
+    const labels = {beginner:"iniciante", intermediate:"intermediário", advanced:"avançado"};
+    $("#status").textContent = lang + " • " + labels[lessonLevel] + (beginnerLesson() ? " • apoio em português" : " • conversação em " + lang.toLowerCase());
+    $("#level").textContent = labels[lessonLevel];
   };
-  beginnerToggle.onchange = () => {
+  levelSelect.onchange = () => {
     stopListening(); stopSpeech();
     replyController?.abort(); conversationGeneration++; replyPending = false;
-    beginnerSupport = beginnerToggle.checked;
-    localStorage.ilBeginnerSupport = beginnerSupport ? "on" : "off";
+    lessonLevel = levelSelect.value;
+    try {
+      const saved = JSON.parse(localStorage.getItem(levelStorageKey()) || "{}");
+      saved[lang] = lessonLevel; localStorage.setItem(levelStorageKey(), JSON.stringify(saved));
+    } catch {}
     recognitionFailures = 0; voiceInputBlocked = false;
     updateLessonMode(); resumeListening();
   };
@@ -627,6 +669,8 @@
       stopListening();
       stopSpeech();
       lang = b.dataset.lang;
+      lessonLevel = readCourseLevel();
+      replyController?.abort(); conversationGeneration++; replyPending = false;
       recognitionFailures = 0;
       voiceInputBlocked = false;
       useRecorder = preferRecorder;
@@ -710,6 +754,7 @@
       return;
     }
     const waiting = add("ai", "🧠 Pensando...");
+    callStatus("Preparando sua resposta…");
     const controller = new AbortController();
     replyController = controller;
     const requestLanguage = lang;
@@ -721,7 +766,8 @@
         signal: controller.signal,
         body: JSON.stringify({
           message,
-          teaching_mode: beginnerLesson() ? "foreign_beginner_pt" : "conversation",
+          teaching_mode: beginnerLesson() ? "foreign_beginner_pt" : lessonLevel === "intermediate" ? "foreign_intermediate" : "conversation",
+          learner_level: lessonLevel,
           voice_conversation: !!callMode,
           language: lang,
           history: history.slice(0, -1).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
@@ -913,9 +959,12 @@
     }
     const token = ++recordingGeneration;
     listening = true;
+    callStatus("Abrindo o microfone…");
     let mic, rec, node, meter, timer, submitted = false;
     const cleanup = () => {
       clearInterval(timer);
+      recorderSubmit = null;
+      finishTurnButton.hidden = true;
       if (rec?.state === "recording") { rec.onstop = null; rec.stop(); }
       node?.disconnect(); meter?.disconnect();
       mic?.getTracks().forEach(t => t.stop());
@@ -935,12 +984,14 @@
       let heard=false, began=performance.now();
       const detectTurn = createTurnDetector();
       const finish = () => { if(submitted) return; submitted=true; clearInterval(timer); rec.stop(); };
+      recorderSubmit = () => { heard = true; finish(); };
       rec.onstop = async () => {
         cleanup();
         if(token !== recordingGeneration) return;
         recorderStop=null;
         if (!heard) { listening=false; resumeListening(500); return; }
         $("#mic").textContent="🎙️ Entendendo sua fala...";
+        callStatus("Entendendo sua fala…");
         try {
           const form = new FormData();
           const type=rec.mimeType || "audio/webm";
@@ -956,10 +1007,13 @@
         } catch(e) {
           if(token !== recordingGeneration) return;
           listening=false; voiceInputBlocked=true;
+          callStatus("Não consegui entender a fala. Toque em Microfone para tentar novamente.");
           add("ai","Microfone: " + e.message + ". Toque no microfone para tentar novamente.");
         }
       };
       rec.start();
+      finishTurnButton.hidden = false;
+      callStatus("Ouvindo você — faça uma pausa quando terminar.");
       $("#mic").textContent="🎙️ Ouvindo sua voz em " + (inputLocale() === "pt-BR" ? "português" : lang.toLowerCase()) + "... fale e faça uma pausa";
       timer=setInterval(() => {
         if(token !== recordingGeneration) { cleanup(); return; }
@@ -975,6 +1029,7 @@
       cleanup();
       if(token !== recordingGeneration) return;
       listening=false; recorderStop=null; voiceInputBlocked=true;
+      callStatus("Não consegui abrir o microfone. Toque em Microfone para tentar novamente.");
       add("ai","Não consegui abrir o microfone: " + e.message);
     }
   }
@@ -997,6 +1052,8 @@
     r.onstart = () => {
       if (recognition !== r) return;
       listening = true;
+      callStatus("Ouvindo você…");
+      finishTurnButton.hidden = false;
       $("#mic").textContent = "🎙️ Ouvindo sua voz em " + (inputLocale() === "pt-BR" ? "português" : lang.toLowerCase()) + "...";
     };
     r.onspeechend = () => {
@@ -1058,6 +1115,7 @@
     if (listening && !interrupted) {
       micPaused = true;
       stopListening();
+      callStatus("Microfone pausado — toque nele para falar.");
       $("#mic").textContent = "🎙️ Microfone pausado — toque para falar";
       return;
     }

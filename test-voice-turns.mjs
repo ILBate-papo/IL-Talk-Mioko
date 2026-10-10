@@ -40,3 +40,15 @@ paid=false;const before=upstreamCalls;
 assert.equal((await handler(req(true))).status,403);
 assert.equal(upstreamCalls,before,'unpaid access cannot invoke AI');
 console.log('Passed: quiet/noisy pauses, continuous speech, short voice replies, text replies and paid-access guard.');
+paid=true;
+for(const language of ['Português','Japonês','Inglês','Espanhol','Francês','Coreano','Italiano']){
+  for(const level of ['beginner','intermediate','advanced']){
+    const request=new Request('https://example.test/il-ai',{method:'POST',body:JSON.stringify({message:'Vamos conversar',language,learner_level:level,teaching_mode:language!=='Português'&&level==='beginner'?'foreign_beginner_pt':level==='intermediate'?'foreign_intermediate':'conversation',voice_conversation:true})});
+    assert.equal((await handler(request)).status,200);
+    const prompt=requestBody.messages[0].content;
+    assert(prompt.includes('NÍVEL DO ALUNO: '+level));
+    if(level==='beginner'&&language!=='Português') assert.match(prompt,/Só fale um exemplo no idioma estudado quando o aluno pedir/);
+    if(level==='advanced') assert.match(prompt,/No nível avançado, pratique conversação natural no idioma selecionado/);
+  }
+}
+console.log('Passed: beginner, intermediate and advanced instructions across all seven courses.');
