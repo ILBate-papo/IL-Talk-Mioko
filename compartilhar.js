@@ -1,5 +1,5 @@
 (() => {
-  const url='https://ilbate-papo.github.io/IL-Talk-Mioko/convite.html';
+  const url='https://ilbate-papo.github.io/IL-Talk-Mioko/convite.html?v=20261010';
   const title='IL Talk Mioko';
   const text='Aprenda sete idiomas com a professora virtual Mioko, com apoio em português para iniciantes.';
   const status=document.getElementById('shareStatus');
