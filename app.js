@@ -30,6 +30,19 @@
   const $ = s => document.querySelector(s);
   const config = () => window.IL_TALK_CONFIG || {};
 
+  // Android's permission dialog can pause the Activity. Its synthetic pagehide
+  // must not cancel the media request that opened that dialog.
+  let pendingMediaRequests = 0;
+  async function requestMedia(constraints) {
+    pendingMediaRequests++;
+    try { return await navigator.mediaDevices.getUserMedia(constraints); }
+    finally { pendingMediaRequests--; }
+  }
+  function handleMediaPageHide(event) {
+    if (event.isTrusted === false && pendingMediaRequests > 0) return;
+    stopMedia();
+  }
+
   let lang = localStorage.ilLang || "Português";
   const locales = { Português: "pt-BR", Japonês: "ja-JP", Inglês: "en-US", Espanhol: "es-ES", Francês: "fr-FR", Coreano: "ko-KR", Italiano: "it-IT" };
   const locale = () => locales[lang] || "pt-BR";
@@ -752,7 +765,7 @@
     }
     const session = conversationGeneration;
     try {
-      const permission = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+      const permission = await requestMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
       permission.getTracks().forEach(track => track.stop());
     } catch (e) {
       if (session !== conversationGeneration) return;
@@ -883,7 +896,7 @@
     voiceInputBlocked = false;
     try {
       const session = conversationGeneration;
-      const opened = await navigator.mediaDevices.getUserMedia({
+      const opened = await requestMedia({
         video: { facingMode: "user" },
         // The preview needs only video. The listening recorder owns the
         // microphone; requesting it here both couples permissions and keeps
@@ -948,7 +961,7 @@
     if (navigator.mediaDevices?.getUserMedia) {
       try {
         // Ask on the call gesture, rather than after the greeting has finished.
-        const permission = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+        const permission = await requestMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
         permission.getTracks().forEach(track => track.stop());
       } catch (e) {
         if (session !== conversationGeneration) return;
@@ -1028,7 +1041,7 @@
     recorderStop = cleanup;
     try {
       await unlockAudio();
-      mic = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+      mic = await requestMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
       if (token !== recordingGeneration) { cleanup(); return; }
       const mime = ["audio/webm;codecs=opus","audio/mp4","audio/ogg;codecs=opus"].find(x => MediaRecorder.isTypeSupported(x));
       rec = new MediaRecorder(mic, mime ? {mimeType:mime} : undefined);
@@ -1200,10 +1213,13 @@
   };
 
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) { stopListening(); stopSpeech(); }
+    if (document.hidden) {
+      if (pendingMediaRequests > 0) return;
+      stopListening(); stopSpeech();
+    }
     else if (callMode && !voiceInputBlocked) resumeListening();
   });
-  window.addEventListener("pagehide", stopMedia);
+  window.addEventListener("pagehide", handleMediaPageHide);
 })();
 
 
