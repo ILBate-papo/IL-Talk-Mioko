@@ -7,7 +7,7 @@ assert.equal(vm.runInNewContext(preference,{navigator:{userAgent:'Android Chrome
 const start=source.indexOf('  function createTurnDetector()');
 const end=source.indexOf('  function startListening()',start);
 let now=0,level=0,interval,requests=0,released=0;
-const messages=[],status=[];
+const messages=[],status=[];let transcript='Como se diz bom dia?';
 const mic={getTracks:()=>[{stop:()=>released++}]};
 const meter={fftSize:1024,getFloatTimeDomainData:array=>array.fill(level),disconnect:()=>{}};
 const button={hidden:true};
@@ -22,7 +22,7 @@ const c=vm.createContext({window:{MediaRecorder:Recorder},MediaRecorder:Recorder
  unlockAudio:async()=>{},performance:{now:()=>now},setInterval:fn=>{interval=fn;return 1;},clearInterval:()=>{},
  $:()=>({textContent:''}),finishTurnButton:button,callStatus:t=>status.push(t),voiceInputBlocked:false,
  inputLocale:()=> 'pt-BR',lang:'Japonês',headers:async()=>({Authorization:'Bearer test'}),config:()=>({VOICE_ENDPOINT:'https://example.test/voice'}),
- fetch:async()=>{requests++;return Response.json({text:'Como se diz bom dia?'});},
+ fetch:async(u,o)=>{requests++;assert.equal(o.body.has('language'),false,'no forced Portuguese hint for Japanese speech');return Response.json({text:transcript});},
  send:t=>messages.push(t),resumeListening:()=>{},add:()=>{},FormData,Blob,Response,AbortSignal,Float32Array,queueMicrotask
 });
 vm.runInContext(source.slice(start,end),c);
@@ -38,9 +38,9 @@ assert.equal(button.hidden,true,'finish button is hidden after recording');
 assert.equal(released,1,'microphone track is released');
 assert(status.some(t=>t.includes('Ouvindo você')));
 // Manual completion also handles speech too quiet for the energy threshold.
-now=0;await vm.runInContext('startRecordedListening()',c);
+transcript='今日は元気ですか？';now=0;await vm.runInContext('startRecordedListening()',c);
 vm.runInContext('recorderSubmit()',c);
 for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));
 assert.equal(requests,2);
-assert.equal(messages.length,2);
+assert.equal(messages.length,2);assert.equal(messages[1],'今日は元気ですか？','Japanese transcript reaches AI unchanged');
 console.log('Passed: Android recorder selection, pause-to-transcription-to-AI pipeline, manual completion and microphone cleanup.');

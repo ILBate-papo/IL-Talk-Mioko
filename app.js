@@ -75,6 +75,7 @@
   let recognition = null;
   let listening = false;
   let voiceInputBlocked = false;
+  let aiCooldownUntil = 0;
   let micPaused = false;
   let replyPending = false;
   let speechPending = false;
@@ -208,7 +209,7 @@
   function resumeListening(delay = 400) {
     clearTimeout(listenTimer);
     if (callMode && !micPaused && !voiceInputBlocked) {
-      listenTimer = setTimeout(startListening, delay);
+      listenTimer = setTimeout(startListening, Math.max(delay, aiCooldownUntil - Date.now()));
     }
   }
 
@@ -731,6 +732,7 @@
   function send(value) {
     const message = String(value ?? $("#text").value).trim();
     if (!message) return;
+    if (Date.now() < aiCooldownUntil) { callStatus("Serviço temporariamente ocupado. Aguarde " + Math.ceil((aiCooldownUntil-Date.now())/1000) + " segundos."); return; }
     if (voice) prepareAudio();
     $("#text").value = "";
     stopListening();
@@ -743,6 +745,7 @@
   }
 
   async function sendMessage(message, conversation) {
+    if (Date.now() < aiCooldownUntil) return;
     replyPending = true;
     stopListening();
     const generation = voiceGeneration;
@@ -779,10 +782,9 @@
       try { data = JSON.parse(raw); }
       catch { throw Error("Resposta inválida do serviço de IA"); }
       if (!r.ok) {
-        throw Error(
-          "HTTP " + r.status + ": " +
-          (data.error || data.message || "Falha")
-        );
+        const error = Error("HTTP " + r.status + ": " + (data.error || data.message || "Falha"));
+        error.retryAfter = Number(data.retry_after) || 60;
+        throw error;
       }
       const answer =
         data.answer || data.reply || data.output_text ||
@@ -796,18 +798,15 @@
       if (conversation !== conversationGeneration) return;
       const limited = /429|rate.?limit|too many requests/i.test(e.message);
       const quota = /insufficient_quota|exceeded your current quota/i.test(e.message);
-      const retry = e.message.match(/try again in ([0-9.hms ]+)/i)?.[1]?.trim();
-      add("ai",
-        e.name === "AbortError"
-          ? "A resposta demorou demais. Tente enviar novamente."
-          : quota
-            ? "O serviço de IA informou falta de cota disponível. É necessário verificar a conta do serviço."
-            : limited
-              ? "A Mioko atingiu o limite temporário do serviço de IA. Aguarde " +
-                (retry || "alguns minutos") +
-                " antes de enviar outra pergunta. A resposta não foi gerada."
-              : "❌ IA não conectou: " + e.message
-      );
+      const notice = e.name === "AbortError"
+        ? "A resposta demorou demais. Toque em Microfone para tentar novamente."
+        : quota ? "O serviço de IA está sem cota. O administrador precisa verificar a conta."
+        : limited ? "Serviço temporariamente ocupado. Aguarde " + Math.ceil(e.retryAfter || 60) + " segundos para falar novamente."
+        : "Não consegui responder. Toque em Microfone para tentar novamente.";
+      if (limited && !quota) aiCooldownUntil = Date.now() + Math.max(1, e.retryAfter || 60) * 1000;
+      else voiceInputBlocked = true;
+      callStatus(notice);
+      add("ai", notice + (!limited && !quota ? " Detalhe: " + e.message : ""));
     } finally {
       clearTimeout(timeout);
       if (replyController === controller) replyController = null;
@@ -996,7 +995,7 @@
           const form = new FormData();
           const type=rec.mimeType || "audio/webm";
           form.append("file",new Blob(chunks,{type}),type.includes("mp4")?"fala.mp4":type.includes("ogg")?"fala.ogg":"fala.webm");
-          form.append("language",inputLocale().split("-")[0]);
+          // Omit the language hint: students may switch languages in the same course.
           const h=await headers(); delete h["Content-Type"];
           const response=await fetch(config().VOICE_ENDPOINT,{method:"POST",headers:h,body:form,signal:AbortSignal.timeout(30000)});
           const data=await response.json();
@@ -1038,10 +1037,10 @@
     if (
       !window.MiokoAuth?.hasAccess() || !callMode || recognition || listening ||
       currentAudio || nativeUtterance || speechPending ||
-      replyPending || voiceInputBlocked || micPaused
+      replyPending || voiceInputBlocked || micPaused || Date.now() < aiCooldownUntil
     ) return;
 
-    if (!SR || useRecorder) { startRecordedListening(); return; }
+    if (!SR || useRecorder || (lang !== "Português" && window.MediaRecorder)) { startRecordedListening(); return; }
     const r = new SR();
     recognition = r;
     r.lang = inputLocale();
