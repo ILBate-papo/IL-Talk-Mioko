@@ -884,8 +884,11 @@
     try {
       const session = conversationGeneration;
       const opened = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true
+        video: { facingMode: "user" },
+        // The preview needs only video. The listening recorder owns the
+        // microphone; requesting it here both couples permissions and keeps
+        // a competing audio capture open on Android.
+        audio: false
       });
       if (session !== conversationGeneration) { opened.getTracks().forEach(track => track.stop()); return; }
       stream = opened;
@@ -894,22 +897,28 @@
       v.srcObject = stream;
       v.hidden = false;
       $("#userPlaceholder").hidden = true;
-      $("#cameraStatus").textContent = "Câmera e microfone ativos";
+      $("#cameraStatus").textContent = "Câmera ativa";
       $("#videoRoom").classList.add("in-call");
       $("#miokoVideo").classList.add("calling");
       $("#videoCall").textContent = "⏹ Encerrar vídeo";
       v.muted = true;
-      v.play().catch(() => {});
+      v.playsInline = true;
+      v.play().catch(e => {
+        if (session !== conversationGeneration) return;
+        $("#cameraStatus").textContent = "Não consegui mostrar a câmera: " + e.message;
+      });
       add("ai",
         "Vídeo iniciado. A câmera mostra sua prévia; imagens não são enviadas à IA. Pode falar ou escrever."
       );
       greetCall();
     } catch (e) {
       stopMedia();
-      add("ai",
-        "Não consegui abrir câmera/microfone: " + e.message +
-        ". Você pode continuar escrevendo."
-      );
+      const notice = e.name === "NotAllowedError" || e.name === "SecurityError"
+        ? "Câmera sem permissão. No Android, abra Configurações → Aplicativos → IL Talk Mioko → Permissões e permita a câmera. Depois toque em Vídeo IA."
+        : "Não consegui abrir sua câmera: " + e.message + ". Feche outros aplicativos que usam a câmera e tente novamente.";
+      $("#cameraStatus").textContent = notice;
+      callStatus(notice);
+      add("ai", notice);
     }
   }
 
