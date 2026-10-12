@@ -9,4 +9,3 @@ export function profileInstructions(isAdmin: boolean): string {
     isAdmin ? "Nesta conversa autenticada como administrador, você está conversando com o Professor Ildebrando Leandro." : "Não presuma que o usuário desta conversa é Ildebrando."
   ].join(" ");
 }
-

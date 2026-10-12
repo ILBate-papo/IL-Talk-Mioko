@@ -4,6 +4,18 @@
   let voices = [], active = null, counter = 0;
   const listeners = new Map();
   let mic = null, mouthTimer = null;
+  const clockRequests = new Map();
+  window.MiokoNativeClock = {
+    setAlarm(hour, minute) {
+      if (!Number.isInteger(hour) || hour < 0 || hour > 23 || !Number.isInteger(minute) || minute < 0 || minute > 59) return Promise.reject(Error('Horário inválido.'));
+      const id = 'clock-' + (++counter);
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { clockRequests.delete(id); reject(Error('O Relógio não respondeu. Configure o alarme diretamente no celular.')); }, 10000);
+        clockRequests.set(id, {resolve, reject, timer});
+        post({action:'clock-set', id, hour, minute});
+      });
+    }
+  };
   function stopMouth() { clearInterval(mouthTimer); mouthTimer = null; window.MiokoAvatar?.closeMouth(); }
   function animateMouth() {
     stopMouth();
@@ -52,6 +64,14 @@
     }
   };
   window.__miokoNativeEvent = event => {
+    if (event.type.startsWith('clock-')) {
+      const request = clockRequests.get(event.id);
+      if (!request) return;
+      clockRequests.delete(event.id); clearTimeout(request.timer);
+      if (event.type === 'clock-opened') request.resolve({opened:true});
+      else request.reject(Error(event.error || 'Não consegui abrir o Relógio.'));
+      return;
+    }
     if (event.type.startsWith('mic-')) {
       if (!mic || event.id !== mic.id) return;
       if (event.type === 'mic-level') mic.onLevel?.(event.level);

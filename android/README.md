@@ -4,7 +4,7 @@ Aplicativo Android nativo que abre exclusivamente o IL Talk Mioko em uma WebView
 
 - Pacote: `com.iltalk.mioko`
 - Android mínimo: 8.0 (API 26)
-- Versão: 1.0.3 (código 4)
+- Versão preparada: 1.0.4 (código 5); download atual continua 1.0.3 até gerar o APK com a assinatura original.
 - A voz usa os idiomas disponíveis no mecanismo de texto para fala do aparelho. Câmera e microfone pedem permissão quando utilizados.
 - A câmera mostra a prévia do usuário; o serviço atual não recebe imagens do vídeo.
 - O APK é o instalador para download direto. O AAB é o pacote para envio à Google Play.
@@ -30,3 +30,7 @@ realmente do aplicativo, sem pedido de permissão ou seletor de arquivo pendente
 Instale o APK e teste login, bloqueio de contas sem assinatura, texto, câmera, microfone e a voz em cada idioma instalado no Android. Validação de compilação e assinatura não substitui teste de áudio e câmera em um aparelho físico.
 
 A versão 1.0.3 usa captura AAC nativa do Android para as conversas, com envio ao mesmo serviço autenticado de transcrição. A gravação temporária é apagada após envio ou cancelamento. Eventos da voz nativa acionam a animação da boca, e o retorno à Activity reinicia a animação do retrato. Compilação, lint e testes simulados não substituem o teste no aparelho.
+
+## Despertador 1.0.4
+
+O botão Abrir despertador do celular envia ACTION_SET_ALARM ao aplicativo Relógio. A tela do Relógio permanece visível para conferência/confirmacão e escolha do toque. O retorno significa apenas que a tela foi aberta, não que o alarme foi confirmado. O Relógio controla o disparo com a tela apagada. No site ou APK antigo a Mioko apresenta a alternativa manual, sem afirmar que agendou um alarme.

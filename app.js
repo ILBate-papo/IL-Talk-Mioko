@@ -98,6 +98,8 @@
   let cooldownTicker = null;
   let micPaused = false;
   let replyPending = false;
+  let researchMode = false;
+  let examMode = "";
   let speechPending = false;
   let currentAudio = null;
   let nativeUtterance = null;
@@ -832,7 +834,7 @@
     const controller = new AbortController();
     replyController = controller;
     const requestLanguage = lang;
-    const timeout = setTimeout(() => controller.abort(), 45000);
+    const timeout = setTimeout(() => controller.abort(), 60000);
     try {
       const r = await fetch(ep, {
         method: "POST",
@@ -842,6 +844,8 @@
           message,
           teaching_mode: beginnerLesson() ? "foreign_beginner_pt" : lessonLevel === "intermediate" ? "foreign_intermediate" : "conversation",
           learner_level: lessonLevel,
+          research_current: researchMode,
+          exam_mode: examMode,
           voice_conversation: !!callMode,
           humorous_conversation: true,
           client_datetime: new Date().toLocaleString("pt-BR", {timeZoneName:"short"}) + " (" + Intl.DateTimeFormat().resolvedOptions().timeZone + ")",
@@ -864,7 +868,16 @@
         data.target || data.japanese;
       if (!answer) throw Error("A função respondeu sem texto");
       waiting.remove();
-      add("ai", String(answer), true);
+      const answerNode=add("ai", String(answer), true);
+      if (Array.isArray(data.sources)) {
+        const sourceBox=document.createElement("div");sourceBox.style.cssText="font-size:12px;margin-top:8px";
+        for(const value of data.sources.slice(0,8)) {
+          try { const u=new URL(value);if(u.protocol!=="https:" || u.username || u.password)continue;
+            const link=document.createElement("a");link.href=u.href;link.target="_blank";link.rel="noopener noreferrer";link.textContent=u.hostname;link.style.cssText="display:block;color:#9fe9d5";sourceBox.append(link);
+          }catch{}
+        }
+        if(sourceBox.childNodes.length)answerNode.append(sourceBox);
+      }
       if (generation === voiceGeneration && requestLanguage === lang) say(String(answer), data.speech_segments || null);
     } catch (e) {
       waiting.remove();
@@ -1320,6 +1333,21 @@
     else if (callMode && !voiceInputBlocked) resumeListening();
   });
 
+  const examButton=document.createElement("button");examButton.type="button";examButton.className="nb";examButton.textContent="⚖️ Provas OA / OAB";
+  examButton.onclick=()=>{
+    const dialog=document.createElement("dialog");dialog.style.cssText="background:#101a2d;color:white;border:1px solid #00dcff;border-radius:14px;padding:20px;max-width:92vw";
+    const title=document.createElement("p");title.textContent="Escolha a preparação. Informe o edital e, na segunda fase da OAB, a área escolhida.";dialog.append(title);
+    for(const [value,label] of [["portugal_entry","Portugal — prova escrita antes do estágio"],["portugal_stage","Portugal — estágio"],["portugal_oral","Portugal — prova oral final"],["brazil_first","Brasil — OAB primeira fase"],["brazil_second","Brasil — OAB segunda fase"],["","Conversa normal"]]) {
+      const b=document.createElement("button");b.type="button";b.className="nb";b.textContent=label;b.style.cssText="display:block;margin:8px 0;width:100%";
+      b.onclick=()=>{examMode=value;examButton.textContent=value?"⚖️ "+label:"⚖️ Provas OA / OAB";dialog.close();if(value)send("Quero preparar "+label+". Ajude-me a montar um plano de estudo em português; pergunte os dados que faltam antes de indicar datas e critérios.");};dialog.append(b);
+    }
+    const close=document.createElement("button");close.type="button";close.className="nb";close.textContent="Fechar";close.onclick=()=>dialog.close();dialog.append(close);dialog.addEventListener("close",()=>dialog.remove(),{once:true});document.body.append(dialog);dialog.showModal();
+  };
+  $("#mic").parentElement.appendChild(examButton);
+  const researchButton=document.createElement("button");researchButton.type="button";researchButton.className="nb";
+  researchButton.textContent="🌐 Pesquisar fontes";researchButton.setAttribute("aria-pressed","false");
+  researchButton.onclick=()=>{researchMode=!researchMode;researchButton.setAttribute("aria-pressed",String(researchMode));researchButton.textContent=researchMode?"🌐 Pesquisa ligada":"🌐 Pesquisar fontes";};
+  $("#mic").parentElement.appendChild(researchButton);
   // Foreground reminder: browsers cannot guarantee alarms with a locked screen.
   let alarmTimer = null;
   const alarmButton=document.createElement("button");
@@ -1329,11 +1357,20 @@
     const dialog=document.createElement("dialog");
     dialog.style.cssText="background:#101a2d;color:white;border:1px solid #00dcff;border-radius:14px;padding:20px;max-width:92vw";
     const title=document.createElement("p");title.textContent="Lembrete enquanto a Mioko estiver aberta. Para despertar com tela apagada, use o Relógio do celular.";
-    const input=document.createElement("input");input.type="time";input.setAttribute("aria-label","Hora do lembrete");
+    const input=document.createElement("input");input.type="time";input.required=true;input.setAttribute("aria-label","Hora do lembrete");
     const set=document.createElement("button");set.type="button";set.textContent="Ativar";set.className="nb";
     const cancel=document.createElement("button");cancel.type="button";cancel.textContent="Cancelar lembrete";cancel.className="nb";
     const close=document.createElement("button");close.type="button";close.textContent="Fechar";close.className="nb";
-    dialog.append(title,input,set,cancel,close);document.body.append(dialog);
+    const clock=document.createElement("button");clock.type="button";clock.className="nb";clock.textContent="Abrir despertador do celular";
+    clock.onclick=async()=>{
+      if(!input.value){input.reportValidity();return;}
+      if(!window.MiokoNativeClock){title.textContent="Para tocar com a tela apagada, abra o Relógio do celular e crie o alarme para "+input.value+". A integração será disponível no APK atualizado.";return;}
+      clock.disabled=true;
+      try { const [h,m]=input.value.split(":").map(Number);await window.MiokoNativeClock.setAlarm(h,m);title.textContent="Confira e confirme o alarme no Relógio do celular. Você pode escolher o toque lá."; }
+      catch(error){title.textContent=error.message;}
+      finally{clock.disabled=false;}
+    };
+    dialog.append(title,input,clock,set,cancel,close);document.body.append(dialog);
     dialog.addEventListener("close",()=>dialog.remove(),{once:true});
     close.onclick=()=>dialog.close();
     cancel.onclick=()=>{clearTimeout(alarmTimer);alarmTimer=null;alarmButton.textContent="⏰ Lembrete";dialog.close();};

@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setMediaPlaybackRequiresUserGesture(false);
-        settings.setUserAgentString(settings.getUserAgentString() + " ILTalkMioko/1.0.3");
+        settings.setUserAgentString(settings.getUserAgentString() + " ILTalkMioko/1.0.4");
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
         try (java.io.InputStream input = getAssets().open("native-voice.js"); java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
             byte[] buffer = new byte[4096]; int count;
@@ -177,6 +177,25 @@ public class MainActivity extends Activity {
     }
     private void handleVoice(JSONObject message) throws Exception {
         String action = message.optString("action");
+        if (action.equals("clock-set")) {
+            String id = message.optString("id");
+            int hour = message.optInt("hour", -1), minute = message.optInt("minute", -1);
+            if (id.isEmpty() || id.length() > 80 || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+                voiceEvent(id, "clock-error", "Escolha um horário válido."); return;
+            }
+            Intent alarm = new Intent(android.provider.AlarmClock.ACTION_SET_ALARM)
+                .putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour)
+                .putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute)
+                .putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, "Mioko — hora de acordar ou estudar")
+                .putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false);
+            try {
+                startActivity(alarm);
+                voiceEvent(id, "clock-opened", null);
+            } catch (android.content.ActivityNotFoundException | SecurityException error) {
+                voiceEvent(id, "clock-error", "Não consegui abrir o Relógio. Abra o aplicativo Relógio do celular e configure o alarme.");
+            }
+            return;
+        }
         if (action.equals("mic-start")) {
             String id = message.optString("id");
             if (id.isEmpty() || id.length() > 80) return;

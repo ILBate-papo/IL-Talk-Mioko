@@ -22,4 +22,3 @@ export async function checkAccess(req: Request) {
     return {allowed,status:allowed?200:403,role:'member',user_id:user.id,email,paid_until:row?.paid_until || null,reason:allowed?'':'Seu acesso aguarda confirmação de pagamento ou renovação.'};
   } catch { return {allowed:false,status:503,reason:'Não foi possível verificar seu acesso. Tente novamente.'}; }
 }
-
