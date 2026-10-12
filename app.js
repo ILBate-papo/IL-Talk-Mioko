@@ -797,6 +797,12 @@
   function send(value) {
     const message = String(value ?? $("#text").value).trim();
     if (!message) return;
+    if (/^(?:mioko(?:[ -]san)?[,! ]*)?(?:que horas são|qual (?:é )?a hora|what time is it|今何時|¿?qué hora es|che ore sono)[?？.! ]*$/i.test(message)) {
+      const now = new Date().toLocaleTimeString(locale(), {hour:"2-digit",minute:"2-digit"});
+      add("user", message, true); add("ai", now, true);
+      if (voice) { prepareAudio(); stopListening(); stopSpeech(); say(now, [{locale:locale(),text:now}]); }
+      $("#text").value=""; return;
+    }
     if (Date.now() < aiCooldownUntil) { callStatus("Serviço temporariamente ocupado. Aguarde " + Math.ceil((aiCooldownUntil-Date.now())/1000) + " segundos."); return; }
     if (voice) prepareAudio();
     $("#text").value = "";
@@ -837,7 +843,8 @@
           teaching_mode: beginnerLesson() ? "foreign_beginner_pt" : lessonLevel === "intermediate" ? "foreign_intermediate" : "conversation",
           learner_level: lessonLevel,
           voice_conversation: !!callMode,
-          humorous_conversation: !!window.MiokoNativeMicrophone,
+          humorous_conversation: true,
+          client_datetime: new Date().toLocaleString("pt-BR", {timeZoneName:"short"}) + " (" + Intl.DateTimeFormat().resolvedOptions().timeZone + ")",
           language: lang,
           history: history.slice(0, -1).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
         })
@@ -1312,6 +1319,40 @@
     }
     else if (callMode && !voiceInputBlocked) resumeListening();
   });
+
+  // Foreground reminder: browsers cannot guarantee alarms with a locked screen.
+  let alarmTimer = null;
+  const alarmButton=document.createElement("button");
+  alarmButton.type="button";alarmButton.className="nb";alarmButton.textContent="⏰ Lembrete";
+  $("#mic").parentElement.appendChild(alarmButton);
+  alarmButton.onclick=async()=>{
+    const dialog=document.createElement("dialog");
+    dialog.style.cssText="background:#101a2d;color:white;border:1px solid #00dcff;border-radius:14px;padding:20px;max-width:92vw";
+    const title=document.createElement("p");title.textContent="Lembrete enquanto a Mioko estiver aberta. Para despertar com tela apagada, use o Relógio do celular.";
+    const input=document.createElement("input");input.type="time";input.setAttribute("aria-label","Hora do lembrete");
+    const set=document.createElement("button");set.type="button";set.textContent="Ativar";set.className="nb";
+    const cancel=document.createElement("button");cancel.type="button";cancel.textContent="Cancelar lembrete";cancel.className="nb";
+    const close=document.createElement("button");close.type="button";close.textContent="Fechar";close.className="nb";
+    dialog.append(title,input,set,cancel,close);document.body.append(dialog);
+    dialog.addEventListener("close",()=>dialog.remove(),{once:true});
+    close.onclick=()=>dialog.close();
+    cancel.onclick=()=>{clearTimeout(alarmTimer);alarmTimer=null;alarmButton.textContent="⏰ Lembrete";dialog.close();};
+    set.onclick=async()=>{
+      if(!input.value){input.reportValidity();return;}
+      await unlockAudio();
+      const target=new Date();const [h,m]=input.value.split(":").map(Number);target.setHours(h,m,0,0);
+      if(target.getTime()<=Date.now())target.setDate(target.getDate()+1);
+      clearTimeout(alarmTimer);alarmButton.textContent="⏰ "+input.value;
+      alarmTimer=setTimeout(()=>{
+        alarmTimer=null;alarmButton.textContent="⏰ Lembrete";
+        const notice={Português:"Está na hora do seu lembrete!",Japonês:"リマインダーの時間です！",Inglês:"It is time for your reminder!",Espanhol:"¡Es la hora de tu recordatorio!",Italiano:"È ora del tuo promemoria!",Francês:"C'est l'heure de votre rappel !",Coreano:"알림 시간입니다!"}[lang];
+        add("ai",notice);stopListening();stopSpeech();say(notice,[{locale:locale(),text:notice}]);
+      },target.getTime()-Date.now());
+      dialog.close();
+    };
+    dialog.showModal();
+  };
+
   window.addEventListener("pagehide", handleMediaPageHide);
 })();
 
