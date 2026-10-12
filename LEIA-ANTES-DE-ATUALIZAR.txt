@@ -1,0 +1,9 @@
+IL Talk Mioko — atualizado em 12/10/2026
+
+O conteúdo já foi publicado no repositório ILBate-papo/IL-Talk-Mioko. Este ZIP é uma cópia completa dos arquivos dessa versão.
+
+Para enviar ao GitHub, extraia o ZIP e envie o conteúdo DE DENTRO da pasta IL-Talk-Mioko à raiz do repositório. Não envie apenas o ZIP nem crie uma pasta extra dentro do repositório.
+
+Inclui preparação OA/OAB, pesquisa atual com fontes, idiomas no avançado e código Android para abrir o Relógio. A duração do estágio de Portugal não foi confirmada.
+
+IMPORTANTE: o novo APK ainda não foi assinado. Os APKs existentes em downloads são versões anteriores. O código Android está preparado como 1.0.4; para gerar uma atualização compatível, é necessária a chave original .jks/.keystore. O canto natural não está implementado. Consulte ATUALIZACAO-20261012.md.
