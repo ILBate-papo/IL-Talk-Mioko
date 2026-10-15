@@ -173,6 +173,7 @@
     $("#chat").scrollTop = $("#chat").scrollHeight;
     if (save) {
       history.push({
+        language: lang,
         role: type === "ai" ? "assistant" : "user",
         content: String(text)
       });
@@ -677,14 +678,41 @@
     scrollTo(0, 0);
   };
 
+  function openCourseMode(mode) {
+    if (!window.MiokoAuth?.hasAccess()) return;
+    if (mode !== "Aluno" && window.MiokoAuth.role() !== "admin") {
+      callStatus("Esta área é exclusiva do administrador.");
+      return;
+    }
+    if (mode === "Administração") {
+      stopMedia();
+      window.location.assign("admin.html");
+      return;
+    }
+    const teacher = $("#miokoTeacher");
+    if (teacher) teacher.hidden = mode !== "Professor";
+    document.querySelectorAll("[data-mode]").forEach(button => {
+      const active = button.dataset.mode === mode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const target = mode === "Professor" ? teacher : $("#miokoLanguages");
+    target?.scrollIntoView({behavior:"smooth",block:"start"});
+  }
   document.querySelectorAll("[data-mode]").forEach(b => {
-    b.onclick = () => {
-      document.querySelectorAll("[data-mode]").forEach(x =>
-        x.classList.remove("active")
-      );
-      b.classList.add("active");
-    };
+    b.onclick = () => openCourseMode(b.dataset.mode);
   });
+  $("#teacherPrepare")?.addEventListener("click", () => {
+    if(window.MiokoAuth?.role()!=="admin")return;
+    const subject = $("#teacherTopic").value.trim();
+    if (!subject) { $("#teacherTopic").focus(); return; }
+    openCourseMode("Professor");
+    send("Prepare uma atividade de " + lang + " para o nível " + lessonLevel +
+      " sobre: " + subject.slice(0,500) + ". Inclua um exemplo, um exercício e espere minha resposta antes de mostrar o gabarito.");
+    $("#videoRoom").scrollIntoView({behavior:"smooth",block:"start"});
+  });
+
+
 
   // Italian replaces the former generic language option.
   const otherLanguage = document.querySelector('[data-lang="Outro"]');
@@ -850,7 +878,7 @@
           humorous_conversation: true,
           client_datetime: new Date().toLocaleString("pt-BR", {timeZoneName:"short"}) + " (" + Intl.DateTimeFormat().resolvedOptions().timeZone + ")",
           language: lang,
-          history: history.slice(0, -1).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
+          history: history.slice(0, -1).filter(x => x.language === lang).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
         })
       });
       const raw = await r.text();
