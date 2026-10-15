@@ -1,6 +1,6 @@
 // Search uses the existing Groq account. A denied tool/quota never becomes a fabricated answer.
 export function needsResearch(message, requested = false) {
-  return requested || /edital|calend[aá]rio|inscri[çc][aã]o|not[ií]cia|atualidade|atualizad|hoje|[uú]ltim[oa]|sal[aá]rio|custo de vida|nacionalidade|cidadania|imigra[çc][aã]o|visto|direito de portugal|uni[aã]o europeia|current|latest|news|salary|cost of living|citizenship|immigration|今日|最新|ニュース|給料|生活費|国籍|noticias|salario|costo de vida|stipendio|costo della vita|actualité|salaire|생활비|시민권/i.test(message);
+  return requested || /edital|calend[aá]rio|inscri[çc][aã]o|not[ií]cia|atualidade|aconteciment|temperatura|previs[aã]o|clima|weather|temperature|天気|気温|météo|날씨|atualizad|hoje|[uú]ltim[oa]|sal[aá]rio|custo de vida|nacionalidade|cidadania|imigra[çc][aã]o|visto|direito de portugal|uni[aã]o europeia|current|latest|news|salary|cost of living|citizenship|immigration|今日|最新|ニュース|給料|生活費|国籍|noticias|salario|costo de vida|stipendio|costo della vita|actualité|salaire|생활비|시민권/i.test(message);
 }
 export function sourceUrls(value) {
   const urls = new Set();
