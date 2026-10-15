@@ -384,7 +384,7 @@
     // installed voice so a stalled network engine cannot silence the lesson.
     const installed = matching.filter(v => v.localService);
     const candidates = installed.length ? installed : matching;
-    return candidates.find(v => /female|feminina|maria|francisca|luciana|victoria|vitoria|vitória|samantha|zira|kyoko|haruka|nanami|yuna|heami|amelie|audrey|monica|paulina|elsa|isabella/i.test(v.name)) || candidates[0] || null;
+    return candidates.find(v => /female|feminina|maria|francisca|luciana|ayumi|mizuki|kaori|sayaka|victoria|vitoria|vitória|samantha|zira|kyoko|haruka|nanami|yuna|heami|amelie|audrey|monica|paulina|elsa|isabella/i.test(v.name)) || candidates[0] || null;
   }
 
   async function waitForNativeVoices() {
@@ -445,7 +445,7 @@
           if (!validLocales.has(part.locale) || typeof part.text !== "string") throw Error("Idioma da fala não reconhecido.");
           return {text: cleanSpeech(part.text), locale: part.locale};
         }).filter(part => part.text).flatMap(part => speechSegments(part.text,
-          spokenLocale() === "pt-BR" && ["ja-JP", "ko-KR"].includes(part.locale) ? "pt-BR" : part.locale))
+          part.locale))
       : speechSegments(text, spokenLocale());
     const chunks = parts.flatMap(part => speechChunks(part.text).map(text => ({text, locale: part.locale})));
     const selectedVoices = new Map();
@@ -463,7 +463,7 @@
           const u = new SpeechSynthesisUtterance(chunk);
           u.lang = selected.lang;
           u.rate = part.locale !== "pt-BR" && spokenLocale() === "pt-BR" ? 0.85 : 1.05;
-          u.pitch = 1;
+          u.pitch = 1.18;
           if (selected) u.voice = selected;
           nativeUtterance = u;
           let done = false, started = 0, deadline;
@@ -834,7 +834,7 @@
     const controller = new AbortController();
     replyController = controller;
     const requestLanguage = lang;
-    const timeout = setTimeout(() => controller.abort(), 60000);
+    const timeout = setTimeout(() => controller.abort(), 35000);
     try {
       const r = await fetch(ep, {
         method: "POST",
