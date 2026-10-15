@@ -400,7 +400,7 @@
     const details = document.createElement("details");
     details.id = "miokoVoiceChoices";
     details.style.cssText = "margin:12px 0;padding:12px;border:1px solid #34445e;border-radius:12px";
-    const title = document.createElement("summary"); title.textContent = "🎙️ Voz alternativa do aparelho";
+    const title = document.createElement("summary"); title.textContent = "🎙️ Vozes da Mioko";
     const rows = document.createElement("div");
     const note = document.createElement("p");
     note.style.cssText = "font-size:13px;color:#b9c9de";
@@ -439,19 +439,12 @@
         const test = document.createElement("button"); test.type="button"; test.className="nb";
         test.textContent="Ouvir"; test.disabled=!matching.length;
         test.setAttribute("aria-label","Ouvir voz em " + language);
-        test.onclick=()=>{
-          enableVoice();stopListening();stopSpeech();
-          const generation=voiceGeneration;speechPending=true;
-          nativeSay(greetings[language],generation,[{text:greetings[language],locale:code}]).catch(error=>{
-            if(generation!==voiceGeneration)return;
-            speechPending=false;closeMouth();callStatus(error.message);resumeListening();
-          });
-        };
+        test.onclick=()=>{enableVoice();say(greetings[language],[{text:greetings[language],locale:code}]);};
         row.append(select,test); rows.append(row);
       }
-      note.textContent = "A voz principal usa a OpenAI. Estas escolhas valem para a alternativa do aparelho. " + (missing.length
+      note.textContent = missing.length
         ? "Sem voz disponível: " + missing.join(", ") + ". Ative as vozes desses idiomas nas configurações de fala do aparelho e reabra o navegador. A escolha da voz é salva neste aparelho."
-        : "Cada idioma usa uma voz própria. A escolha da voz é salva neste aparelho.");
+        : "Cada idioma usa uma voz própria. A escolha da voz é salva neste aparelho.";
     }
     window.speechSynthesis?.addEventListener?.("voiceschanged",refresh);
     window.addEventListener("mioko-auth",refresh);
@@ -613,7 +606,7 @@
     }
   }
 
-  async function serviceSay(text, generation, segments = null) {
+  async function serviceSay(text, generation) {
     const c = config();
     if (!c.VOICE_ENDPOINT) {
       throw Error("Serviço de voz não configurado");
@@ -679,7 +672,7 @@
       if (currentAudio !== a || generation !== voiceGeneration) return;
       releaseAudio();
       voiceRetryAfter = Date.now() + 60000;
-      nativeSay(text, generation, segments).catch(e => {
+      nativeSay(text, generation).catch(e => {
         if (generation !== voiceGeneration) return;
         speechPending = false;
         closeMouth();
@@ -700,27 +693,14 @@
     const generation = voiceGeneration;
     speechPending = true;
     callStatus("Preparando a voz…");
+
     try {
-      if (Date.now() >= voiceRetryAfter && text.length <= 1800) {
-        try {
-          await serviceSay(text, generation, segments);
-          return;
-        } catch (error) {
-          if (generation !== voiceGeneration) return;
-          releaseAudio();
-          voiceRetryAfter = Date.now() + 60000;
-          callStatus("Voz principal indisponível; tentando a voz do aparelho…");
-          if ([401,403,429,503].includes(error.status)) {
-            add("ai", "Voz principal indisponível. Confira a configuração e os créditos da OpenAI. Vou tentar a voz do aparelho.");
-          }
-        }
-      }
       await nativeSay(text, generation, segments);
     } catch (e) {
       if (generation !== voiceGeneration) return;
       speechPending = false;
       closeMouth();
-      const notice = "Não consegui iniciar a voz: " + e.message;
+      const notice = "Não consegui iniciar a voz: " + e.message + ". Confira o volume de mídia e a voz instalada no Android.";
       turnStatus.textContent = notice;
       add("ai", notice + " A conversa por texto continua disponível.");
       resumeListening();
