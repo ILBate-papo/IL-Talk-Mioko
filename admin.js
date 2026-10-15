@@ -62,22 +62,7 @@
   async function refresh(){ $('#refresh').disabled=true;try{const d=await api({action:'snapshot',days:Number($('#period').value)});render(d);$('#adminStatus').textContent='Atualizado em '+date(new Date().toISOString());}catch(e){$('#adminStatus').textContent=e.message;}finally{$('#refresh').disabled=false;}}
   $('#adminLoginForm').onsubmit=async e=>{e.preventDefault();$('#adminEnter').disabled=true;$('#loginStatus').textContent='Conferindo acesso…';session=null;try{const d=await authRequest('/auth/v1/token?grant_type=password',{email:$('#adminEmail').value.trim().toLowerCase(),password:$('#adminPassword').value});session={...d,expires_at:Math.floor(Date.now()/1000)+d.expires_in};const data=await api({action:'snapshot',days:30});render(data);$('#adminLogin').hidden=true;$('#adminApp').hidden=false;$('#loginStatus').textContent='';}catch(e){session=null;$('#loginStatus').textContent=e.message==='Invalid login credentials'?'E-mail ou senha incorretos.':e.message;}finally{$('#adminPassword').value='';$('#adminEnter').disabled=false;}};
   $('#refresh').onclick=refresh;$('#period').onchange=refresh;
-  $('#logout').onclick=()=>{const old=session;lock();sessionStorage.removeItem('mioko_auth_session_v1');if(old?.access_token)authRequest('/auth/v1/logout?scope=local',{},old.access_token).catch(()=>{});};
+  $('#logout').onclick=()=>{const old=session;lock();if(old?.access_token)authRequest('/auth/v1/logout?scope=local',{},old.access_token).catch(()=>{});};
   $('#confirmForm').onsubmit=async e=>{e.preventDefault();$('#confirmPayment').disabled=true;$('#paymentStatus').textContent='Conferindo registro…';try{const d=await api({action:'confirm_payment',user_id:$('#paymentUser').value,method:$('#paymentMethod').value,reference:$('#paymentReference').value,received_confirmed:$('#receivedConfirmed').checked});$('#paymentStatus').textContent=d.already_confirmed?'Esta transação já estava confirmada. O prazo não foi duplicado.':'Recebimento registrado. Acesso liberado até '+date(d.paid_until)+'.';$('#paymentReference').value='';$('#receivedConfirmed').checked=false;await refresh();}catch(e){$('#paymentStatus').textContent=e.message;}finally{$('#confirmPayment').disabled=false;}};
   $('#settingsForm').onsubmit=async e=>{e.preventDefault();$('#saveSettings').disabled=true;try{await api({action:'settings',price_cents:Math.round(Number($('#price').value)*100),access_days:Number($('#accessDays').value),pix_key:$('#pixKey').value,pix_owner:$('#pixOwner').value,pix_bank:$('#pixBank').value,mercado_pago_url:$('#mercadoPagoUrl').value});$('#settingsStatus').textContent='Cobrança salva. Os dados atualizados aparecerão no site.';await refresh();}catch(e){$('#settingsStatus').textContent=e.message;}finally{$('#saveSettings').disabled=false;}};
-  async function resumeCourseAdmin() {
-    let stored;
-    try { stored=JSON.parse(sessionStorage.getItem('mioko_auth_session_v1')||'null'); } catch { return; }
-    if(!stored?.access_token || !stored?.refresh_token)return;
-    session=stored;
-    $('#loginStatus').textContent='Conferindo sua sessão de administrador…';
-    try {
-      const data=await api({action:'snapshot',days:30});
-      sessionStorage.setItem('mioko_auth_session_v1',JSON.stringify(session));
-      render(data);$('#adminLogin').hidden=true;$('#adminApp').hidden=false;$('#loginStatus').textContent='';
-    } catch {
-      lock();$('#loginStatus').textContent='Entre com a conta administradora para abrir o painel.';
-    }
-  }
-  resumeCourseAdmin();
 })();
