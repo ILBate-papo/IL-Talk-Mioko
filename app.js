@@ -78,6 +78,8 @@
     Italiano: "Ciao! Sono Mioko. Di cosa vorresti parlare?"
   };
   let voice = localStorage.ilVoice !== "off";
+  let speechRateFactor = 1;
+  let lastReply = null;
   let history = [];
   let historyKey = "";
   function loadUserHistory() {
@@ -374,17 +376,79 @@
     tick();
   }
 
+  const voiceSettingsKey = "ilMiokoVoicesV2";
+  function voiceSettings() {
+    try { return JSON.parse(localStorage.getItem(voiceSettingsKey) || "{}"); }
+    catch { return {}; }
+  }
+  const voiceId = v => v.voiceURI || v.name + "|" + v.lang;
+  const sameLanguage = (a,b) => a.replace(/_/g,"-").toLowerCase().split("-")[0] === b.toLowerCase().split("-")[0];
   function selectNativeVoice(requestedLocale = spokenLocale()) {
-    const voices = window.speechSynthesis.getVoices();
-    const code = requestedLocale.toLowerCase();
-    const exact = voices.filter(v => v.lang.replace("_", "-").toLowerCase() === code);
-    const compatible = voices.filter(v => v.lang.toLowerCase().split("-")[0] === code.split("-")[0]);
+    const voices = window.speechSynthesis?.getVoices() || [];
+    const compatible = voices.filter(v => sameLanguage(v.lang, requestedLocale));
+    const saved = voiceSettings()[requestedLocale];
+    const chosen = compatible.find(v => voiceId(v) === saved);
+    if (chosen) return chosen;
+    const exact = compatible.filter(v => v.lang.replace(/_/g,"-").toLowerCase() === requestedLocale.toLowerCase());
     const matching = exact.length ? exact : compatible;
-    // Android lists network voices alongside installed voices. Prefer an
-    // installed voice so a stalled network engine cannot silence the lesson.
-    const installed = matching.filter(v => v.localService);
-    const candidates = installed.length ? installed : matching;
-    return candidates.find(v => /female|feminina|maria|francisca|luciana|ayumi|mizuki|kaori|sayaka|victoria|vitoria|vitória|samantha|zira|kyoko|haruka|nanami|yuna|heami|amelie|audrey|monica|paulina|elsa|isabella/i.test(v.name)) || candidates[0] || null;
+    const female = /female|feminina|maria|francisca|luciana|ayumi|mizuki|kaori|sayaka|victoria|vitoria|vitória|samantha|zira|kyoko|haruka|nanami|yuna|heami|amelie|audrey|monica|paulina|elsa|isabella|google/i;
+    // Restore the original selection: a local male voice must not hide a compatible female/network voice.
+    return matching.find(v => female.test(v.name)) || matching[0] || null;
+  }
+
+  function setupVoiceChoices() {
+    const details = document.createElement("details");
+    details.id = "miokoVoiceChoices";
+    details.style.cssText = "margin:12px 0;padding:12px;border:1px solid #34445e;border-radius:12px";
+    const title = document.createElement("summary"); title.textContent = "🎙️ Vozes da Mioko";
+    const rows = document.createElement("div");
+    const note = document.createElement("p");
+    note.style.cssText = "font-size:13px;color:#b9c9de";
+    details.append(title, rows, note);
+    $("#chat").before(details);
+    function refresh() {
+      rows.replaceChildren();
+      const available = window.speechSynthesis?.getVoices() || [];
+      const missing = [];
+      for (const [language,code] of Object.entries(locales)) {
+        const row = document.createElement("label");
+        row.style.cssText = "display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:9px 0";
+        row.append(document.createTextNode(language + ": "));
+        const select = document.createElement("select");
+        select.setAttribute("aria-label","Voz em " + language);
+        select.dataset.voiceLocale = code;
+        select.style.cssText = "max-width:100%;padding:8px;background:#111b2b;color:white;border:1px solid #6684a6;border-radius:8px";
+        const matching = available.filter(v => sameLanguage(v.lang,code));
+        const automatic = document.createElement("option"); automatic.value = "";
+        const selected = selectNativeVoice(code);
+        automatic.textContent = selected ? "Automática — " + selected.name : "Voz não disponível neste navegador";
+        select.append(automatic);
+        for (const v of matching) {
+          const option = document.createElement("option");
+          option.value = voiceId(v); option.textContent = v.name + " (" + v.lang + ")";
+          select.append(option);
+        }
+        select.disabled = !matching.length;
+        if (!matching.length) missing.push(language);
+        select.value = matching.some(v => voiceId(v) === voiceSettings()[code]) ? voiceSettings()[code] : "";
+        select.onchange = () => {
+          const settings = voiceSettings(); settings[code] = select.value;
+          localStorage.setItem(voiceSettingsKey,JSON.stringify(settings));
+          stopSpeech();
+        };
+        const test = document.createElement("button"); test.type="button"; test.className="nb";
+        test.textContent="Ouvir"; test.disabled=!matching.length;
+        test.setAttribute("aria-label","Ouvir voz em " + language);
+        test.onclick=()=>{enableVoice();say(greetings[language],[{text:greetings[language],locale:code}]);};
+        row.append(select,test); rows.append(row);
+      }
+      note.textContent = missing.length
+        ? "Sem voz disponível: " + missing.join(", ") + ". Ative as vozes desses idiomas nas configurações de fala do aparelho e reabra o navegador. A escolha da voz é salva neste aparelho."
+        : "Cada idioma usa uma voz própria. A escolha da voz é salva neste aparelho.";
+    }
+    window.speechSynthesis?.addEventListener?.("voiceschanged",refresh);
+    window.addEventListener("mioko-auth",refresh);
+    refresh();
   }
 
   async function waitForNativeVoices() {
@@ -462,7 +526,7 @@
         await new Promise((resolve, reject) => {
           const u = new SpeechSynthesisUtterance(chunk);
           u.lang = selected.lang;
-          u.rate = part.locale !== "pt-BR" && spokenLocale() === "pt-BR" ? 0.85 : 1.05;
+          u.rate = (part.locale !== "pt-BR" && spokenLocale() === "pt-BR" ? 0.85 : 1) * speechRateFactor;
           u.pitch = 1.18;
           if (selected) u.voice = selected;
           nativeUtterance = u;
@@ -655,6 +719,7 @@
     say(text, [{text, locale: spokenLocale()}]);
   };
   $("#voice").insertAdjacentElement("afterend", testVoiceButton);
+  setupVoiceChoices();
 
   $("#enter").onclick = async () => {
     if (!await window.MiokoAuth?.signIn()) return;
@@ -677,13 +742,37 @@
     scrollTo(0, 0);
   };
 
+  function openCourseMode(mode) {
+    if (!window.MiokoAuth?.hasAccess()) return;
+    if (mode !== "Aluno" && window.MiokoAuth.role() !== "admin") {
+      callStatus("Esta área é exclusiva do administrador.");
+      return;
+    }
+    if (mode === "Administração") {
+      stopMedia();
+      window.location.assign("admin.html");
+      return;
+    }
+    const teacher = $("#miokoTeacher");
+    if (teacher) teacher.hidden = mode !== "Professor";
+    document.querySelectorAll("[data-mode]").forEach(button => {
+      const active = button.dataset.mode === mode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const target = mode === "Professor" ? teacher : $("#miokoLanguages");
+    target?.scrollIntoView({behavior:"smooth",block:"start"});
+  }
   document.querySelectorAll("[data-mode]").forEach(b => {
-    b.onclick = () => {
-      document.querySelectorAll("[data-mode]").forEach(x =>
-        x.classList.remove("active")
-      );
-      b.classList.add("active");
-    };
+    b.onclick = () => openCourseMode(b.dataset.mode);
+  });
+  $("#teacherPrepare")?.addEventListener("click", () => {
+    const subject = $("#teacherTopic").value.trim();
+    if (!subject) { $("#teacherTopic").focus(); return; }
+    openCourseMode("Professor");
+    send("Prepare uma atividade de " + lang + " para o nível " + lessonLevel +
+      " sobre: " + subject.slice(0,500) + ". Inclua um exemplo, um exercício e espere minha resposta antes de mostrar o gabarito.");
+    $("#videoRoom").scrollIntoView({behavior:"smooth",block:"start"});
   });
 
   // Italian replaces the former generic language option.
@@ -719,6 +808,7 @@
     stopListening(); stopSpeech();
     replyController?.abort(); conversationGeneration++; replyPending = false;
     lessonLevel = levelSelect.value;
+    lastReply=null; speechRateFactor=1;
     try {
       const saved = JSON.parse(localStorage.getItem(levelStorageKey()) || "{}");
       saved[lang] = lessonLevel; localStorage.setItem(levelStorageKey(), JSON.stringify(saved));
@@ -737,6 +827,7 @@
       stopListening();
       stopSpeech();
       lang = b.dataset.lang;
+      lastReply=null; speechRateFactor=1;
       lessonLevel = readCourseLevel();
       replyController?.abort(); conversationGeneration++; replyPending = false;
       recognitionFailures = 0;
@@ -878,7 +969,10 @@
         }
         if(sourceBox.childNodes.length)answerNode.append(sourceBox);
       }
-      if (generation === voiceGeneration && requestLanguage === lang) say(String(answer), data.speech_segments || null);
+      if (generation === voiceGeneration && requestLanguage === lang) {
+        lastReply={text:String(answer),segments:data.speech_segments || null,language:lang,level:lessonLevel};
+        say(lastReply.text,lastReply.segments);
+      }
     } catch (e) {
       waiting.remove();
       if (conversation !== conversationGeneration) return;
@@ -911,7 +1005,20 @@
     }
   };
   document.querySelectorAll("[data-q]").forEach(b => {
-    b.onclick = () => send(b.dataset.q);
+    b.onclick = () => {
+      const q=b.dataset.q;
+      if (/Repita novamente|Fale mais devagar/.test(q) && lastReply?.language===lang && lastReply?.level===lessonLevel) {
+        if (/devagar/.test(q)) speechRateFactor=0.8;
+        enableVoice();say(lastReply.text,lastReply.segments);return;
+      }
+      if (/Converse somente|Aumente a dificuldade/.test(q)) {
+        const levels=["beginner","intermediate","advanced"];
+        levelSelect.value=/Converse somente/.test(q)?"advanced":levels[Math.min(2,levels.indexOf(lessonLevel)+1)];
+        levelSelect.onchange();
+        return;
+      }
+      send(q);
+    };
   });
 
   async function startVideo() {
@@ -1226,7 +1333,7 @@
     ) return;
 
     if (window.MiokoNativeMicrophone) { startNativeListening(); return; }
-    if (!SR || useRecorder || (lang !== "Português" && window.MediaRecorder)) { startRecordedListening(); return; }
+    if (!SR || useRecorder) { startRecordedListening(); return; }
     const r = new SR();
     recognition = r;
     r.lang = inputLocale();
