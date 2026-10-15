@@ -509,7 +509,7 @@
           if (!validLocales.has(part.locale) || typeof part.text !== "string") throw Error("Idioma da fala não reconhecido.");
           return {text: cleanSpeech(part.text), locale: part.locale};
         }).filter(part => part.text).flatMap(part => speechSegments(part.text,
-          part.locale))
+          spokenLocale() === "pt-BR" && ["ja-JP", "ko-KR"].includes(part.locale) ? "pt-BR" : part.locale))
       : speechSegments(text, spokenLocale());
     const chunks = parts.flatMap(part => speechChunks(part.text).map(text => ({text, locale: part.locale})));
     const selectedVoices = new Map();
@@ -526,8 +526,8 @@
         await new Promise((resolve, reject) => {
           const u = new SpeechSynthesisUtterance(chunk);
           u.lang = selected.lang;
-          u.rate = (part.locale !== "pt-BR" && spokenLocale() === "pt-BR" ? 0.85 : 1) * speechRateFactor;
-          u.pitch = 1.18;
+          u.rate = (part.locale !== "pt-BR" && spokenLocale() === "pt-BR" ? 0.85 : 1.05) * speechRateFactor;
+          u.pitch = 1;
           if (selected) u.voice = selected;
           nativeUtterance = u;
           let done = false, started = 0, deadline;
@@ -1499,6 +1499,7 @@
 
   window.addEventListener("pagehide", handleMediaPageHide);
 })();
+
 
 
 
