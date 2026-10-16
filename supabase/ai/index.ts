@@ -51,7 +51,7 @@ serveWithOrigins(async(req)=>{
   const messages=[{role:"system",content:subjectInstructions()+examContext+clockInstructions+researchInstructions+instructions+levelInstructions+lessonInstructions+speechFormat+biography+turnInstructions+humorInstructions+identityInstructions},...h,{role:"user",content:m}];
   const models=[...new Set([model,"openai/gpt-oss-20b","openai/gpt-oss-120b"])];
   const locales=new Set(["pt-BR","ja-JP","en-US","es-ES","fr-FR","ko-KR","it-IT"]);
-  let retryAfter=Infinity, sawLimit=false, lastError="Serviço de IA indisponível", lastStage="groq", lastCode;
+  let retryAfter=Infinity, sawLimit=false, sawNonLimitFailure=false, lastError="Serviço de IA indisponível", lastStage="groq", lastCode;
   const responseDeadline=Date.now()+(voiceTurn?12000:30000);
   for(const candidate of models){
    if(Date.now()>=responseDeadline)break;
@@ -60,8 +60,19 @@ serveWithOrigins(async(req)=>{
    try{
     const strict=["qwen/qwen3.8-27b","openai/gpt-oss-20b","openai/gpt-oss-120b"].includes(candidate);
     const oss=candidate.startsWith("openai/gpt-oss-");
-    const r=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{Authorization:"Bearer "+key,"Content-Type":"application/json"},signal:AbortSignal.timeout(Math.max(1,Math.min(voiceTurn?6000:20000,responseDeadline-Date.now()))),body:JSON.stringify({model:candidate,messages,reasoning_effort:oss?"low":"none",response_format:strict?speechSchema:{type:"json_object"},max_tokens:voiceTurn?(oss?1000:400):1200})});
-    const rawResponse=await r.text();let d;try{d=JSON.parse(rawResponse)}catch{lastError="Resposta inválida do serviço";continue;}
+    const requestCandidate=async responseFormat=>{
+     if(Date.now()>=responseDeadline)throw new Error("Tempo de recuperação da resposta esgotado");
+     const r=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{Authorization:"Bearer "+key,"Content-Type":"application/json"},signal:AbortSignal.timeout(Math.max(1,Math.min(voiceTurn?6000:20000,responseDeadline-Date.now()))),body:JSON.stringify({model:candidate,messages,reasoning_effort:oss?"low":"none",response_format:responseFormat,max_tokens:voiceTurn?(oss?1000:400):1200})});
+     const rawResponse=await r.text();let d;try{d=JSON.parse(rawResponse)}catch{throw new Error("Resposta inválida do serviço");}
+     return {r,d};
+    };
+    let {r,d}=await requestCandidate(strict?speechSchema:{type:"json_object"});
+    // A schema-generation failure is not a rate limit. Recover once in JSON mode,
+    // then keep the same speech-segment and language validation below.
+    if(strict && r.status===400 && ["json_validate_failed","tool_use_failed"].includes(d?.error?.code)){
+     console.warn(JSON.stringify({request_id:id,model:candidate,status:400,code:d.error.code,recovery:"json_object"}));
+     ({r,d}=await requestCandidate({type:"json_object"}));
+    }
     if(!r.ok){
      lastCode=d?.error?.code;lastError="Groq HTTP "+r.status+": "+(d?.error?.message||"Falha");
      console.warn(JSON.stringify({request_id:id,model:candidate,status:r.status,code:lastCode,remaining_tokens:r.headers.get("x-ratelimit-remaining-tokens"),remaining_requests:r.headers.get("x-ratelimit-remaining-requests")}));
@@ -71,23 +82,25 @@ serveWithOrigins(async(req)=>{
       const wait=Math.ceil(Number(r.headers.get("retry-after"))||seconds||60);
       modelCooldowns.set(candidate,Date.now()+wait*1000);retryAfter=Math.min(retryAfter,wait);sawLimit=true;continue;
      }
+     sawNonLimitFailure=true;
      if([401,403].includes(r.status))return fail(lastError,502,"groq",lastCode);
      continue;
     }
+    lastCode=undefined;lastStage="speech_format";
     const choice=d.choices?.[0];
-    if(choice?.finish_reason==="length"){lastError="O modelo não concluiu a resposta";lastCode="response_length";continue;}
+    if(choice?.finish_reason==="length"){sawNonLimitFailure=true;lastError="O modelo não concluiu a resposta";lastCode="response_length";continue;}
     const answer=choice?.message?.content;
-    if(typeof answer!=="string"||!answer.trim()){lastError="O modelo respondeu sem texto";continue;}
-    let spoken;try{spoken=JSON.parse(answer.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/, ""));}catch{lastError="Resposta fora do formato de fala";lastStage="speech_format";continue;}
-    if(!Array.isArray(spoken?.segments)||!spoken.segments.length||spoken.segments.length>50||spoken.segments.some(x=>!x||!locales.has(x.locale)||typeof x.text!=="string"||!x.text.trim()||x.text.length>6000)){lastError="Trechos de fala inválidos";lastStage="speech_format";continue;}
+    if(typeof answer!=="string"||!answer.trim()){sawNonLimitFailure=true;lastError="O modelo respondeu sem texto";continue;}
+    let spoken;try{spoken=JSON.parse(answer.trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/, ""));}catch{sawNonLimitFailure=true;lastError="Resposta fora do formato de fala";lastStage="speech_format";continue;}
+    if(!Array.isArray(spoken?.segments)||!spoken.segments.length||spoken.segments.length>50||spoken.segments.some(x=>!x||!locales.has(x.locale)||typeof x.text!=="string"||!x.text.trim()||x.text.length>6000)){sawNonLimitFailure=true;lastError="Trechos de fala inválidos";lastStage="speech_format";continue;}
     const segments=spoken.segments.map(x=>({locale:x.locale,text:x.text.trim()}));
     const targetLocale={Japonês:"ja-JP",Inglês:"en-US",Espanhol:"es-ES",Francês:"fr-FR",Coreano:"ko-KR",Italiano:"it-IT"}[language];
-    if(immersion && targetLocale && segments.some(x=>x.locale!==targetLocale)){lastError="Resposta fora do idioma selecionado";lastStage="speech_language";continue;}
+    if(immersion && targetLocale && segments.some(x=>x.locale!==targetLocale)){sawNonLimitFailure=true;lastError="Resposta fora do idioma selecionado";lastStage="speech_language";continue;}
     console.info(JSON.stringify({request_id:id,model:candidate,status:200,fallback:candidate!==model}));
     return json({answer:segments.map(x=>x.text).join("\n"),speech_segments:segments,model:candidate,provider:"groq",contract:"mioko-groq-v2-segments",request_id:id,research_status:research?(research.ok?"verified":"unavailable"):"not_requested",sources:research?.ok?research.sources:[],researched_at:research?.date||null});
-   }catch(e){lastError=e?.name==="TimeoutError"||e?.name==="AbortError"?"Modelo demorou a responder":String(e?.message||e);lastStage="upstream";}
+   }catch(e){sawNonLimitFailure=true;lastError=e?.name==="TimeoutError"||e?.name==="AbortError"?"Modelo demorou a responder":String(e?.message||e);lastStage="upstream";}
   }
-  return sawLimit?fail("Todos os modelos disponíveis estão temporariamente limitados",429,"groq","rate_limit_exceeded",Number.isFinite(retryAfter)?retryAfter:60):fail(lastError,502,lastStage,lastCode);
+  return sawLimit&&!sawNonLimitFailure?fail("Todos os modelos disponíveis estão temporariamente limitados",429,"groq","rate_limit_exceeded",Number.isFinite(retryAfter)?retryAfter:60):fail(lastCode==="rate_limit_exceeded"?"A IA não conseguiu concluir a resposta. Tente novamente.":lastError,502,lastStage,lastCode==="rate_limit_exceeded"?"response_unavailable":lastCode);
 
  }catch(e){const timeout=e?.name==="TimeoutError"||e?.name==="AbortError";return fail(timeout?"Groq excedeu 45 segundos":e?.message||e,timeout?504:502,"upstream")}
 });
