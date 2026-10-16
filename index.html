@@ -826,6 +826,12 @@
 
 .loginCard .seoTitle{font-size:clamp(25px,5vw,35px);line-height:1.2;letter-spacing:0;margin:22px 0 12px}.loginCard>p{line-height:1.65}.seoAccess{font-size:13px;color:#b8c9e0}.seoInfo{margin-top:28px;padding-top:22px;border-top:1px solid #3b5070;text-align:left;font-size:15px;line-height:1.65}.loginCard .seoInfo h2{font-size:19px;letter-spacing:0;color:#edf4ff;margin:22px 0 12px}.seoInfo p{color:#c9d7e9}.seoInfo a{color:#9cdeff}.seoInfo details{border-top:1px solid #2c415d;margin-top:14px;padding-top:14px}.seoInfo summary{cursor:pointer;font-weight:650}.shareButtons{display:flex;flex-wrap:wrap;gap:8px}.shareButtons a,.shareButtons button{display:inline-block;padding:11px 14px;border:1px solid #6684a6;border-radius:10px;background:#15263d;color:#edf6ff;text-decoration:none;font:600 14px/1.3 Arial,sans-serif;cursor:pointer}.sharePhoto{display:inline-block;font-size:14px}#shareStatus{font-size:13px}
 
+
+/* Password visibility control, shared by login and account creation. */
+.miokoPasswordField{position:relative;width:100%}
+.loginCard .miokoPasswordField input{padding-right:60px}
+.miokoPasswordToggle{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:8px;background:transparent;color:inherit;font-size:24px;cursor:pointer}
+.miokoPasswordToggle:focus-visible{outline:2px solid #00dcff;outline-offset:1px}
 </style></head><body>
 <section id="login" class="login"><div class="card loginCard"><div class="v15Hero ilbp-mail-stage">
 <img src="assets/site-cde7b0ddde7c.jpg" alt="IL Talk Cursos de Idiomas">
@@ -851,7 +857,7 @@
 </svg>
 
 </div>
-<h1 class="seoTitle">Aprenda idiomas com a Mioko</h1><p>Pratique japonês, inglês, espanhol, francês, coreano, italiano e português com uma professora virtual de inteligência artificial.</p><input id="email" placeholder="E-mail"><input id="pass" type="password" placeholder="Senha"><button id="enter" class="nb">ENTRAR</button><p class="seoAccess">Já tem conta? Entre com seu e-mail e senha. O acesso às aulas exige e-mail confirmado e pagamento conferido.</p>
+<h1 class="seoTitle">Aprenda idiomas com a Mioko</h1><p>Pratique japonês, inglês, espanhol, francês, coreano, italiano e português com uma professora virtual de inteligência artificial.</p><input id="email" placeholder="E-mail"><div class="miokoPasswordField"><input id="pass" type="password" placeholder="Senha"><button id="miokoPasswordToggle" class="miokoPasswordToggle" type="button" aria-controls="pass" aria-label="Mostrar senha" title="Mostrar senha" aria-pressed="false">👁️</button></div><button id="enter" class="nb">ENTRAR</button><p class="seoAccess">Já tem conta? Entre com seu e-mail e senha. O acesso às aulas exige e-mail confirmado e pagamento conferido.</p>
 <section id="miokoPublicInfo" class="seoInfo" aria-labelledby="learnTitle">
 <h2 id="learnTitle">Do primeiro contato à conversação avançada</h2>
 <p>Para começar do zero, escolha o idioma e escolha o nível Iniciante. A Mioko explica em português e fala os exemplos com a voz do idioma estudado. Você pode pedir frases mais curtas, traduções e repetições.</p>
@@ -888,4 +894,23 @@
 <div class="compose"><textarea id="text" placeholder="Escreva para a Mioko. Você não precisa usar microfone."></textarea><button id="send" class="nb">💬 ENVIAR</button></div>
 <div class="quick"><button class="nb" data-q="Fale mais devagar e depois repita.">🐢 Mais devagar</button><button class="nb" data-q="Explique em português e depois repita no idioma estudado.">🇧🇷 Português</button><button class="nb" data-q="Repita novamente.">🔁 Repetir</button><button class="nb" data-q="Aumente a dificuldade.">🚀 Avançar</button><button class="nb" data-q="Converse somente no idioma escolhido.">💬 Só no idioma</button></div></section>
 <section class="panel"><h2>Progresso do aluno</h2><div class="progress"><div><b>Nível</b><span id="level">Em avaliação</span></div><div><b>Conversação</b><span>Em construção</span></div><div><b>Última aula</b><span>Salva neste dispositivo</span></div><div><b>Retomar</b><span>Do ponto anterior</span></div></div></section>
-</main><footer>🦁 IL Talk Cursos de Idiomas • V10</footer></div><script src="config.js"></script><script src="app.js?v=20261012-research-clock"></script><script src="compartilhar.js?v=20261010-3"></script></body></html>
+</main><footer>🦁 IL Talk Cursos de Idiomas • V10</footer></div><script src="config.js"></script><script src="app.js?v=20261012-research-clock"></script><script src="compartilhar.js?v=20261010-3"></script>
+<script>
+(() => {
+  const password = document.getElementById('pass');
+  const toggle = document.getElementById('miokoPasswordToggle');
+  const setVisible = visible => {
+    password.type = visible ? 'text' : 'password';
+    toggle.textContent = visible ? '🙈' : '👁️';
+    toggle.setAttribute('aria-label', visible ? 'Esconder senha' : 'Mostrar senha');
+    toggle.setAttribute('title', visible ? 'Esconder senha' : 'Mostrar senha');
+    toggle.setAttribute('aria-pressed', String(visible));
+  };
+  toggle.addEventListener('click', () => setVisible(password.type === 'password'));
+  // Return to a hidden password when submitting or leaving the login screen.
+  document.getElementById('enter').addEventListener('click', () => setVisible(false));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) setVisible(false);
+  });
+})();
+</script></body></html>
