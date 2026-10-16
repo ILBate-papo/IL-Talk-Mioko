@@ -186,7 +186,8 @@
 
   function cleanSpeech(text) {
     return String(text)
-      .replace(/^\s*(?:Leitura|Romanização|Romaji)\s*:[^\n]*$/gim, " ")
+      .replace(/^\s*(?:Leitura|Romanização|Romaji|Pronúncia(?: aproximada)?|Transcrição fonética|Fonética|IPA|Pronunciation|Phonetic(?: transcription)?)\s*:[^\n]*$/gim, " ")
+      .replace(/(?:^|\s)(?:pt-BR|ja-JP|en-US|es-ES|fr-FR|ko-KR|it-IT)\s*[:=]\s*/g, " ")
       .replace(/[*#_`~]+/g, " ")
       .replace(/https?:\/\/\S+/g, " ")
       .replace(/\s+/g, " ")
@@ -496,7 +497,7 @@
           u.onstart = () => {
             if (generation !== voiceGeneration || nativeUtterance !== u) return;
             started = performance.now();
-            callStatus("Mioko está falando…");
+            callStatus(part.locale === "pt-BR" ? "Mioko está falando em português…" : "Voz de " + ({"ja-JP":"japonês","en-US":"inglês","es-ES":"espanhol","fr-FR":"francês","ko-KR":"coreano","it-IT":"italiano"}[part.locale] || "outro idioma") + "…");
             closeMouth();
             $("#miokoVideo").classList.add("speaking");
             window.MiokoAvatar?.setMouth(0.45, true);
