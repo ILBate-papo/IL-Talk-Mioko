@@ -1008,13 +1008,26 @@
     greetCall();
   };
 
-  $("#photo").onclick = () => $("#photoIn").click();
-  $("#file").onclick = () => $("#fileIn").click();
+  let attachmentPicking = false;
+  function pickAttachment(id) {
+    attachmentPicking = true;
+    stopListening(); stopSpeech();
+    callStatus("Escolha o arquivo que deseja enviar à Mioko.");
+    $(id).click();
+  }
+  $("#photo").onclick = () => pickAttachment("#photoIn");
+  $("#file").onclick = () => pickAttachment("#fileIn");
+  ["#photoIn", "#fileIn"].forEach(id => $(id).addEventListener("cancel", () => {
+    attachmentPicking = false;
+    resumeListening(500);
+  }));
   ["#photoIn", "#fileIn"].forEach(id => {
     $(id).onchange = e => {
       const file = e.target.files[0];
       e.target.value = "";
-      if (!file) return;
+      attachmentPicking = false;
+      if (!file) { resumeListening(500); return; }
+      stopListening(); stopSpeech();
       // Android and browser attachments use the same authenticated document service.
       const conversation = conversationGeneration;
       replyQueue = replyQueue.catch(() => {}).then(async () => {
@@ -1023,7 +1036,7 @@
         stopListening(); stopSpeech();
         const pending = add("ai", "Abrindo arquivo…");
         try {
-          const documents = await import("./site-documents.js?v=20261010-2");
+          const documents = await import("./site-documents.js?v=20261016-3");
           const result = await documents.analyzeFile(file, config(), headers, text => {
             pending.querySelector("p").textContent = text;
             callStatus(text);
@@ -1221,7 +1234,7 @@
     if (
       !callMode || recognition || listening ||
       currentAudio || nativeUtterance || speechPending ||
-      replyPending || voiceInputBlocked || micPaused || Date.now() < aiCooldownUntil
+      attachmentPicking || replyPending || voiceInputBlocked || micPaused || Date.now() < aiCooldownUntil
     ) return;
 
     if (window.MiokoNativeMicrophone) { startNativeListening(); return; }

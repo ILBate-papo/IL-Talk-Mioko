@@ -1,6 +1,6 @@
 const fs = require('fs'), vm = require('vm'), assert = require('assert/strict');
 const src = fs.readFileSync(__dirname + '/app.js', 'utf8');
-const start = src.indexOf('  ["#photoIn", "#fileIn"].forEach');
+const start = src.indexOf('  ["#photoIn", "#fileIn"].forEach(id => {\n    $(id).onchange');
 const end = src.indexOf('\n  const SR =', start);
 assert(start > 0 && end > start);
 async function check(nativeWindow, outcome = 'success') {
@@ -9,7 +9,7 @@ async function check(nativeWindow, outcome = 'success') {
   const $ = id => { if (!elements.has(id)) elements.set(id, {}); return elements.get(id); };
   const context = vm.createContext({
     window: nativeWindow, $, replyQueue: Promise.resolve(), conversationGeneration: 1,
-    replyPending: false, speechPending: false, currentAudio: null, nativeUtterance: null,
+    attachmentPicking: false, replyPending: false, speechPending: false, currentAudio: null, nativeUtterance: null,
     config: () => ({SUPABASE_PROJECT_REF: 'lxjbpklzrhylmlyepdkc'}), headers: async () => ({}),
     resumeListening: () => resumed++, stopListening: () => stopped++, stopSpeech() {}, callStatus() {},
     say: (...args) => spoken.push(args),
@@ -22,10 +22,10 @@ async function check(nativeWindow, outcome = 'success') {
       return {answer: 'Explicação do laudo.', description: 'Arquivo: teste.pdf'};
     }}
   });
-  vm.runInContext(src.slice(start, end).replace('await import("./site-documents.js?v=20261010-2")', 'globalThis.documents'), context);
+  vm.runInContext(src.slice(start, end).replace('await import("./site-documents.js?v=20261016-3")', 'globalThis.documents'), context);
   const target = {files: [{name: 'teste.pdf'}], value: 'selected'};
   $('#fileIn').onchange({target}); await context.replyQueue;
-  assert.equal(opened, 1); assert.equal(stopped, 1); assert.equal(resumed, 1);
+  assert.equal(opened, 1); assert.equal(stopped, 2); assert.equal(resumed, 1);
   assert.equal(target.value, ''); assert.equal(context.replyPending, false);
   assert(!messages.some(x => /upload ainda não conectado/.test(x.text)));
   if (outcome === 'success') {
