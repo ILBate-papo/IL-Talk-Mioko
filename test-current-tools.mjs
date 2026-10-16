@@ -2,9 +2,10 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 const context=vm.createContext({URL,Response,Request,AbortSignal,Date,console,crypto,
+ serveWithOrigins:fn=>context.handler=fn,
  Deno:{env:{get:k=>k==='GROQ_API_KEY'?'test-key':undefined},serve:fn=>context.handler=fn},
  checkAccess:async()=>({allowed:true,role:'member'}),profileInstructions:()=> 'CREATOR BIOGRAPHY'});
-for(const name of ['research','exams']) vm.runInContext(readFileSync('supabase/ai/'+name+'.ts','utf8').replace(/export /g,''),context);
+for(const name of ['research','exams','subjects']) vm.runInContext(readFileSync('supabase/ai/'+name+'.ts','utf8').replace(/export /g,''),context);
 assert(vm.runInContext('needsResearch("salário e custo de vida no Japão")',context));
 assert(!vm.runInContext('needsResearch("こんにちは、元気ですか？")',context));
 assert(vm.runInContext('examInstructions("portugal_entry").toLowerCase().includes("antes do estágio")',context));

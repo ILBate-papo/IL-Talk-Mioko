@@ -1335,11 +1335,11 @@
     else if (callMode && !voiceInputBlocked) resumeListening();
   });
 
-  const examButton=document.createElement("button");examButton.type="button";examButton.className="nb";examButton.textContent="⚖️ Provas OA / OAB";
+  const examButton=document.createElement("button");examButton.type="button";examButton.className="nb";examButton.textContent="📚 Concursos / OA / OAB";
   examButton.onclick=()=>{
     const dialog=document.createElement("dialog");dialog.style.cssText="background:#101a2d;color:white;border:1px solid #00dcff;border-radius:14px;padding:20px;max-width:92vw";
     const title=document.createElement("p");title.textContent="Escolha a preparação. Informe o edital e, na segunda fase da OAB, a área escolhida.";dialog.append(title);
-    for(const [value,label] of [["portugal_entry","Portugal — prova escrita antes do estágio"],["portugal_stage","Portugal — estágio"],["portugal_oral","Portugal — prova oral final"],["brazil_first","Brasil — OAB primeira fase"],["brazil_second","Brasil — OAB segunda fase"],["","Conversa normal"]]) {
+    for(const [value,label] of [["public_exam","Concursos públicos — plano e simulados"],["portugal_entry","Portugal — prova escrita antes do estágio"],["portugal_stage","Portugal — estágio"],["portugal_oral","Portugal — prova oral final"],["brazil_first","Brasil — OAB primeira fase"],["brazil_second","Brasil — OAB segunda fase"],["","Conversa normal"]]) {
       const b=document.createElement("button");b.type="button";b.className="nb";b.textContent=label;b.style.cssText="display:block;margin:8px 0;width:100%";
       b.onclick=()=>{examMode=value;examButton.textContent=value?"⚖️ "+label:"⚖️ Provas OA / OAB";dialog.close();if(value)send("Quero preparar "+label+". Ajude-me a montar um plano de estudo em português; pergunte os dados que faltam antes de indicar datas e critérios.");};dialog.append(b);
     }
