@@ -1,6 +1,6 @@
 // Payment, leads and access statistics for IL Talk Mioko.
 {
- const script=document.createElement("script");script.src="business.js?v=20261009-seo1";document.head.appendChild(script);
+ const script=document.createElement("script");script.src="business.js?v=20261016-cadastro1";document.head.appendChild(script);
  const style=document.createElement("link");style.rel="stylesheet";style.href="business.css?v=20261009-1";document.head.appendChild(style);
 }
 // Download the signed Android app from the public login page.
@@ -12,11 +12,11 @@
 // Load access controls before allowing any course entry.
 {
   const authScript = document.createElement("script");
-  authScript.src = "auth.js?v=20261009-negocio1";
+  authScript.src = "auth.js?v=20261016-cadastro1";
   document.head.appendChild(authScript);
   const authStyle = document.createElement("link");
   authStyle.rel = "stylesheet";
-  authStyle.href = "auth.css?v=20261009-acesso1";
+  authStyle.href = "auth.css?v=20261016-cadastro1";
   document.head.appendChild(authStyle);
 }
 // IL TALK MIOKO — serviço de voz com alternativa do navegador.

@@ -9,8 +9,23 @@
   const enter=document.querySelector('#enter');
   enter.after(status);
   const buttons=document.createElement('div');buttons.className='authActions';
-  const register=document.createElement('button');register.type='button';register.className='nb';register.textContent='Criar conta';
+  const register=document.createElement('button');register.type='button';register.className='nb';register.id='openRegistration';register.textContent='Criar minha conta';register.setAttribute('aria-expanded','false');register.setAttribute('aria-controls','miokoRegistration');
   buttons.append(register);status.after(buttons);
+  const registration=document.createElement('form');registration.id='miokoRegistration';registration.hidden=true;
+  const heading=document.createElement('h2');heading.textContent='Crie sua conta na Mioko';heading.tabIndex=-1;
+  const help=document.createElement('p');help.textContent='Use seu e-mail e escolha uma senha. Esta é a conta das aulas, separada da conta Mercado Pago.';
+  registration.append(heading,help);
+  function field(id,label,type,autocomplete){const l=document.createElement('label');l.htmlFor=id;l.textContent=label;const input=document.createElement('input');input.id=id;input.type=type;input.autocomplete=autocomplete;input.required=true;registration.append(l,input);return input;}
+  const signupEmail=field('signupEmail','Seu e-mail','email','email');signupEmail.maxLength=254;
+  const signupPassword=field('signupPassword','Crie uma senha (mínimo 8 caracteres)','password','new-password');signupPassword.minLength=8;
+  const signupConfirm=field('signupConfirm','Repita a senha','password','new-password');signupConfirm.minLength=8;
+  const create=document.createElement('button');create.type='submit';create.className='nb';create.textContent='Cadastrar e confirmar e-mail';
+  const back=document.createElement('button');back.type='button';back.className='nb';back.textContent='Voltar para entrar';
+  const signupStatus=document.createElement('p');signupStatus.setAttribute('role','status');signupStatus.setAttribute('aria-live','polite');
+  registration.append(create,back,signupStatus);buttons.after(registration);
+  const loginFields=[document.querySelector('#email'),document.querySelector('.miokoPasswordField')||document.querySelector('#pass'),enter,buttons,document.querySelector('.seoAccess')].filter(Boolean);
+  function showRegistration(show){registration.hidden=!show;register.setAttribute('aria-expanded',String(show));loginFields.forEach(e=>e.hidden=show);status.textContent='';if(show){signupEmail.value=document.querySelector('#email').value;heading.focus();}else{signupPassword.value=signupConfirm.value='';document.querySelector('#email').focus();}}
+  register.onclick=()=>showRegistration(true);back.onclick=()=>showRegistration(false);
   document.querySelector('#email').type='email';
   document.querySelector('#email').autocomplete='username';
   document.querySelector('#email').setAttribute('aria-label','E-mail');
@@ -53,17 +68,18 @@
     } catch(e){tell(e.message==='Invalid login credentials'?'E-mail ou senha incorretos.':e.message);return false;}
     finally{enter.disabled=false;}
   }
-  register.onclick=async()=>{
-    const email=document.querySelector('#email').value.trim().toLowerCase();
-    const password=document.querySelector('#pass').value;
-    if(!email||password.length<8){tell('Informe seu e-mail e escolha uma senha com pelo menos 8 caracteres.');return;}
-    register.disabled=true;
+  registration.onsubmit=async e=>{
+    e.preventDefault();
+    const email=signupEmail.value.trim().toLowerCase(),password=signupPassword.value;
+    if(!registration.reportValidity())return;
+    if(password!==signupConfirm.value){signupStatus.textContent='As senhas estão diferentes. Digite a mesma senha nos dois campos.';signupConfirm.focus();return;}
+    create.disabled=true;signupStatus.textContent='Criando sua conta…';
     try{
       await request('/auth/v1/signup',{email,password});
-      tell('Confira seu e-mail para confirmar o cadastro. Depois volte e entre. Criar conta não libera acesso sem pagamento; o administrador tem acesso próprio.');
-      document.querySelector('#pass').value='';
-    }catch(e){tell(e.message);}
-    finally{register.disabled=false;}
+      document.querySelector('#email').value=email;document.querySelector('#pass').value='';showRegistration(false);
+      tell('Cadastro enviado. Abra seu e-mail e confirme o cadastro (confira também o spam). Depois volte, entre e escolha como pagar. As aulas são liberadas após a conferência do pagamento.');
+    }catch(e){signupStatus.textContent=e.message;}
+    finally{create.disabled=false;}
   };
   async function signOut() {
     const old=session;session=null;access=null;accessChecked=0;save();

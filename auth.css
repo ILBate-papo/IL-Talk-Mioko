@@ -1,3 +1,11 @@
 #authStatus{font-size:.9rem;line-height:1.5;overflow-wrap:anywhere;color:#ffd894;margin:12px 0}
 .authActions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
 [data-mode][hidden]{display:none!important}
+#login [hidden]{display:none!important}
+#miokoRegistration{text-align:left;padding:18px;margin-top:16px;border:1px solid #355270;border-radius:16px;background:#0f1c2e}
+#miokoRegistration h2{font-size:22px;letter-spacing:0;margin:0 0 10px;color:#f1d292}
+#miokoRegistration p{font-size:14px;line-height:1.6;color:#bdd0e3}
+#miokoRegistration label{display:block;margin:14px 0 7px;font-size:14px;color:#e4edfa}
+#miokoRegistration input{display:block;width:100%;box-sizing:border-box}
+#miokoRegistration button{width:100%;margin-top:14px}#miokoRegistration button[type=submit]{background:#dfc17f;color:#112030;border-color:#dfc17f}
+#login .authActions{width:100%}#login .authActions .nb{width:100%;min-height:48px;border-color:#d8bd7c;color:#f1d292}

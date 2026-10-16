@@ -46,16 +46,24 @@
   if(!card)return;
   const box=node('section',null,'miokoCommerce');box.id='miokoCommerce';
   const status=node('p',null,'commerceStatus');status.setAttribute('role','status');
-  box.append(node('h2','Comece a conversar com a Mioko'),node('p','Crie sua conta, confirme o e-mail e pague para liberar seu acesso.'));
+  box.append(node('h2','Como começar suas aulas'),node('p','1. Crie sua conta na Mioko. 2. Confirme o e-mail e entre. 3. Escolha como pagar abaixo.'));
   const billing=node('div');box.append(billing);
   card.insertBefore(box,document.getElementById("miokoPublicInfo"));
   call('il-public',{action:'settings'}).then(cfg=>{
     const price=node('p',money(cfg.price_cents),'price');
-    const duration=node('p','Pagamento único para '+cfg.access_days+' dias de acesso. Para renovar, faça um novo pagamento.','subtle');
+    const duration=node('p','Cada período liberado dá acesso por '+cfg.access_days+' dias. O Pix é avulso. No Mercado Pago, confira as condições de cobrança e renovação antes de confirmar.','subtle');
     billing.append(price,duration);
+    if(!cfg.mercado_pago_url&&!cfg.pix_key){billing.append(node('p','As formas de pagamento ainda não foram configuradas. Aguarde a orientação do professor.','subtle'));return;}
     if(cfg.mercado_pago_url){
       try{const u=new URL(cfg.mercado_pago_url);if(u.protocol==='https:'&&['mpago.la','mercadopago.com.br','www.mercadopago.com.br','link.mercadopago.com.br'].includes(u.hostname)){
-        const link=node('a','Pagar pelo Mercado Pago','payLink');link.href=u.href;link.target='_blank';link.rel='noopener noreferrer';link.onclick=()=>event('checkout').catch(()=>{});billing.append(link);
+        const opening=node('p',null,'commerceStatus');opening.setAttribute('role','status');
+        const link=node('a','Abrir pagamento no Mercado Pago','payLink');link.id='miokoCheckout';link.href=u.href;link.target='_self';link.rel='noopener noreferrer';link.onclick=()=>{opening.textContent='Abrindo o Mercado Pago… Aguarde a página carregar. Se não abrir, copie o link abaixo.';event('checkout').catch(()=>{});};billing.append(link,opening);
+        billing.append(node('p','Na próxima tela, toque em “Escolher como pagar”. Se aparecer a opção “Sem conta Mercado Pago”, você pode escolher cartão sem entrar em uma conta. Confira o nome de quem recebe, o valor e se existe cobrança mensal.','subtle'));
+        const fallback=node('details'),fallbackTitle=node('summary','Não abriu? Copiar link de pagamento');
+        const urlLabel=node('label','Link oficial de pagamento');urlLabel.htmlFor='miokoCheckoutUrl';
+        const urlField=node('input');urlField.id='miokoCheckoutUrl';urlField.value=u.href;urlField.readOnly=true;
+        const copyLink=node('button','Copiar link');copyLink.type='button';copyLink.onclick=async()=>{try{await navigator.clipboard.writeText(u.href);opening.textContent='Link copiado. Cole na barra de endereços do Chrome para abrir o pagamento.';}catch{urlField.focus();urlField.select();opening.textContent='Selecione e copie o link acima. Depois abra no Chrome.';}};
+        fallback.append(fallbackTitle,urlLabel,urlField,copyLink);billing.append(fallback);
       }}catch{}
     }
     if(cfg.pix_key){
@@ -66,7 +74,7 @@
     }
     const details=node('details'),summary=node('summary','Já paguei — informar transação');
     const explanation=node('p','Entre com sua conta no botão ENTRAR, mesmo se o acesso ainda estiver aguardando pagamento. Depois informe a transação. O acesso será liberado após a conferência do recebimento.','subtle');
-    const method=node('select');method.id='miokoPaymentMethod';method.append(new Option('Pix','pix'),new Option('Mercado Pago','mercadopago'));
+    const method=node('select');method.id='miokoPaymentMethod';if(cfg.pix_key)method.append(new Option('Pix','pix'));if(cfg.mercado_pago_url)method.append(new Option('Mercado Pago','mercadopago'));
     const ml=node('label','Forma de pagamento');ml.htmlFor=method.id;
     const ref=node('input');ref.id='miokoPaymentReference';ref.maxLength=120;ref.placeholder='ID da transação/E2E (não número de cartão)';
     const rl=node('label','ID da transação');rl.htmlFor=ref.id;
