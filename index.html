@@ -832,7 +832,7 @@
 .loginCard .miokoPasswordField input{padding-right:60px}
 .miokoPasswordToggle{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:8px;background:transparent;color:inherit;font-size:24px;cursor:pointer}
 .miokoPasswordToggle:focus-visible{outline:2px solid #00dcff;outline-offset:1px}
-</style><link rel="stylesheet" href="portal.css?v=20261015-1"></head><body>
+</style><link rel="stylesheet" href="portal.css?v=20261015-sala-2"><link rel="stylesheet" href="interface.css?v=20261015-2"></head><body>
 <section id="login" class="login"><div class="card loginCard"><div class="v15Hero ilbp-mail-stage">
 <img src="assets/site-cde7b0ddde7c.jpg" alt="IL Talk Cursos de Idiomas">
 <svg class="v26Fx" viewBox="0 0 1740 771" preserveAspectRatio="none" aria-hidden="true">
@@ -858,7 +858,7 @@
 
 </div>
 <h1 class="seoTitle">Aprenda idiomas com a Mioko</h1><p>Pratique japonês, inglês, espanhol, francês, coreano, italiano e português com uma professora virtual de inteligência artificial.</p><input id="email" placeholder="E-mail"><div class="miokoPasswordField"><input id="pass" type="password" placeholder="Senha"><button id="miokoPasswordToggle" class="miokoPasswordToggle" type="button" aria-controls="pass" aria-label="Mostrar senha" title="Mostrar senha" aria-pressed="false">👁️</button></div><button id="enter" class="nb">ENTRAR</button><p class="seoAccess">Já tem conta? Entre com seu e-mail e senha. O acesso às aulas exige e-mail confirmado e pagamento conferido.</p>
-<nav class="miokoPublicLinks" aria-label="Informações da Mioko"><a class="nb" href="privacidade.html">🔒 Privacidade</a><a class="nb" href="exclusao-conta.html">🗑️ Excluir conta</a><a class="nb" href="sobre-o-professor.html">👨‍🏫 Sobre o professor</a></nav><section id="miokoPublicInfo" class="seoInfo" aria-labelledby="learnTitle">
+<nav class="miokoPublicLinks publicEntryLinks" aria-label="Informações da Mioko"><a href="privacidade.html">Privacidade</a><a href="sobre-o-professor.html">Sobre o professor</a></nav><section id="miokoPublicInfo" class="seoInfo" aria-labelledby="learnTitle">
 <h2 id="learnTitle">Do primeiro contato à conversação avançada</h2>
 <p>Para começar do zero, escolha o idioma e escolha o nível Iniciante. A Mioko explica em português e fala os exemplos com a voz do idioma estudado. Você pode pedir frases mais curtas, traduções e repetições.</p>
 <p>Quem já domina o idioma pode escolher Avançado e praticar a conversação nesse idioma. No Intermediário, há prática com apoio quando necessário. Converse por texto ou use o microfone; a opção de vídeo permite usar a câmera durante a aula com a professora virtual.</p>
@@ -884,8 +884,8 @@
  <path id="ip2" d="M25,15 C100,10 116,88 62,112 C2,95 1,37 25,15" fill="none"/>
  <circle class="ib cyan" r="3.5"><animateMotion dur="2.8s" repeatCount="indefinite"><mpath href="#ip1"/></animateMotion></circle>
  <circle class="ib pink" r="3"><animateMotion dur="3.7s" repeatCount="indefinite"><mpath href="#ip2"/></animateMotion></circle>
-</svg></div><div><b>IL TALK</b><small>CURSOS DE IDIOMAS</small></div></div><nav><button class="nb active" data-mode="Aluno">🎓 Aluno</button><button class="nb" data-mode="Professor">👨‍🏫 Professor</button><button class="nb" data-mode="Administração">🛡️ Administração</button><button id="exitCourse" class="nb exitBtn">🚪 Sair</button></nav></header><main>
-<section class="panel hero"><div><small>NIVELAMENTO POR CONVERSAÇÃO</small><h1>Fale sobre qualquer assunto.<br>A Mioko adapta a aula a você.</h1><p>Comece do seu nível real. Se não compreender, peça português, repetição ou uma fala mais lenta.</p></div><div class="mioko"><img class="miokoPortrait" src="assets/mioko-anime.webp" alt="Mioko — Professora Virtual de Idiomas"><h2>Mioko IA</h2><span>● Professora Virtual de Idiomas</span></div></section>
+</svg></div><div><b>IL TALK</b><small>CURSOS DE IDIOMAS</small></div></div><nav aria-label="Áreas da Mioko"><button type="button" id="openMiokoRoom" class="nb active">Sala da Mioko</button><button class="nb" data-mode="Aluno">Aluno</button><button class="nb" data-mode="Professor">Professor</button><button class="nb" data-mode="Administração">Administração</button><button id="exitCourse" class="nb exitBtn">Sair</button></nav></header><main>
+<section class="panel hero"><div><small>NIVELAMENTO POR CONVERSAÇÃO</small><h1>Converse com a Mioko San.</h1><p>Escolha o idioma e pratique no seu ritmo, por texto ou voz.</p></div><div class="mioko"><img class="miokoPortrait" src="assets/mioko-anime.webp" alt="Mioko — Professora Virtual de Idiomas"><h2>Mioko IA</h2><span>● Professora Virtual de Idiomas</span></div></section>
 <section class="panel"><h2>Idioma</h2><div class="langs"><button class="nb" data-lang="Português">🇧🇷 Português</button><button class="nb sel" data-lang="Japonês">🇯🇵 Japonês</button><button class="nb" data-lang="Inglês">🇬🇧 Inglês</button><button class="nb" data-lang="Espanhol">🇪🇸 Espanhol</button><button class="nb" data-lang="Francês">🇫🇷 Francês</button><button class="nb" data-lang="Coreano">🇰🇷 Coreano</button><button class="nb" data-lang="Outro">🌐 Outro</button></div></section>
 <section class="panel"><div class="roomHead"><div><h2>📹 Sala da Professora Mioko</h2><p id="status">Japonês • avaliação adaptativa</p></div><button id="begin" class="nb">✨ COMEÇAR AULA</button></div>
 <div class="videos" id="videoRoom"><div class="video miokoVideo" id="miokoVideo"><img class="miokoVideoPortrait" src="assets/mioko-anime.webp" alt="Mioko — Professora Virtual de Idiomas"><b>Mioko IA</b><span class="mioko-credit">Professor Ildebrando Leandro</span><span>Professora Virtual de Idiomas</span></div><div class="video" id="userVideoBox"><video id="userVideo" autoplay muted playsinline hidden></video><div class="big" id="userPlaceholder">👤</div><b>Você</b><span id="cameraStatus">Câmera opcional</span></div></div>
@@ -894,7 +894,7 @@
 <div class="compose"><textarea id="text" placeholder="Escreva para a Mioko. Você não precisa usar microfone."></textarea><button id="send" class="nb">💬 ENVIAR</button></div>
 <div class="quick"><button class="nb" data-q="Fale mais devagar e depois repita.">🐢 Mais devagar</button><button class="nb" data-q="Explique em português e depois repita no idioma estudado.">🇧🇷 Português</button><button class="nb" data-q="Repita novamente.">🔁 Repetir</button><button class="nb" data-q="Aumente a dificuldade.">🚀 Avançar</button><button class="nb" data-q="Converse somente no idioma escolhido.">💬 Só no idioma</button></div></section>
 <section class="panel"><h2>Progresso do aluno</h2><div class="progress"><div><b>Nível</b><span id="level">Em avaliação</span></div><div><b>Conversação</b><span>Em construção</span></div><div><b>Última aula</b><span>Salva neste dispositivo</span></div><div><b>Retomar</b><span>Do ponto anterior</span></div></div></section>
-</main><footer><nav class="miokoPublicLinks" aria-label="Informações da Mioko"><a class="nb" href="privacidade.html">🔒 Privacidade</a><a class="nb" href="exclusao-conta.html">🗑️ Excluir conta</a><a class="nb" href="sobre-o-professor.html">👨‍🏫 Sobre o professor</a></nav><p>🦁 IL Talk Cursos de Idiomas · Professor Ildebrando Leandro</p></footer></div><script src="config.js"></script><script src="app.js?v=20261015-cultura-1"></script><script src="compartilhar.js?v=20261010-3"></script>
+</main><footer><nav class="miokoPublicLinks" aria-label="Informações da Mioko"><a href="privacidade.html">Privacidade</a><a href="sobre-o-professor.html">Sobre o professor</a><a href="exclusao-conta.html">Minha conta e meus dados</a></nav><p>🦁 IL Talk Cursos de Idiomas · Professor Ildebrando Leandro</p></footer></div><script src="config.js"></script><script src="app.js?v=20261015-sala-2"></script><script src="compartilhar.js?v=20261010-3"></script>
 <script>
 (() => {
   const password = document.getElementById('pass');
@@ -913,4 +913,4 @@
     if (document.hidden) setVisible(false);
   });
 })();
-</script><script src="portal.js?v=20261015-1"></script><script src="public-links.js?v=20261015-1"></script></body></html>
+</script><script src="portal.js?v=20261015-sala-2"></script><script src="public-links.js?v=20261015-1"></script></body></html>

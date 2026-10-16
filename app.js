@@ -664,7 +664,7 @@
     $("#login").classList.add("hide");
     $("#app").classList.remove("hide");
     prepareAudio();
-    window.MiokoPortal?.open(location.hash.slice(1) || "aluno");
+    window.MiokoPortal?.open("aula");
   };
 
   $("#exitCourse").onclick = () => {

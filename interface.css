@@ -1,0 +1,39 @@
+/* Shared interface polish. The approved lion artwork and audio controls stay in place. */
+#login .loginCard{max-width:600px!important;padding:22px!important;border-color:#263b53;box-shadow:0 20px 60px #0006}
+#login .seoTitle{font-size:clamp(25px,5vw,34px);line-height:1.2;letter-spacing:0;margin:22px 0 12px}
+#login .loginCard>p{font-size:15px;line-height:1.6;color:#b9c8dc}
+#login .loginCard input{min-height:50px;font-size:16px;border-radius:12px;background:#101b2b;margin:0;border-color:#35475e}
+#login #email{margin:12px 0 10px}#login .miokoPasswordField{margin:0 0 12px}#login #pass{padding-right:58px}
+.nb{font:600 14px/1.35 Arial,sans-serif;text-decoration:none;min-height:44px;padding:12px 16px;border-radius:12px;background:#102034;border:1px solid #355270;color:#edf5ff;box-shadow:none;transition:background .15s,border-color .15s}
+.nb:hover{background:#182e47;border-color:#58bed2;box-shadow:none;transform:none}.nb.active,.nb.sel{background:#293529;border-color:#cfb576;color:#ffe3a2;box-shadow:none}
+.nb:focus-visible{outline:2px solid #78e4ef;outline-offset:3px}
+#enter,#send,#begin{background:#dfc17f;color:#112030;border-color:#dfc17f;box-shadow:none;font-weight:700}#enter:hover,#send:hover,#begin:hover{background:#efd69f}
+#login .authActions{justify-content:center}#login .authActions .nb{background:transparent;border-color:#344e6c}
+#login .seoAccess{font-size:13px!important;color:#94a8c0!important}#authStatus:empty{display:none}
+.miokoPublicLinks{display:flex;justify-content:center;align-items:center;gap:10px 22px;flex-wrap:wrap;margin:24px 0;padding:18px 0;border-top:1px solid #26394f}
+.miokoPublicLinks a,#login .miokoPublicLinks a{display:inline-flex;align-items:center;min-height:44px;padding:5px 2px;font:500 13px/1.4 Arial,sans-serif;color:#b4c8df;border:0;border-radius:0;background:none;box-shadow:none;text-decoration:none}
+.miokoPublicLinks a:hover{color:#f4d596;text-decoration:underline;text-underline-offset:4px}
+#login .miokoCommerce{border-radius:16px;padding:20px;background:#0f1c2e;border-color:#2a425e}
+#login .miokoCommerce h2{font-size:20px;line-height:1.35;letter-spacing:0;color:#e8f0fb}#login .miokoCommerce h3{letter-spacing:0}
+#login .miokoCommerce .price{font-size:30px;letter-spacing:0}.seoInfo{font-size:14px}
+#app header{position:relative;gap:16px;padding:16px max(20px,calc((100vw - 1160px)/2));background:#08111f}
+#app header nav{gap:8px;align-items:center}#app header nav .nb{white-space:nowrap}
+#app header>.miokoAdminLink{display:none!important}#openMiokoRoom{border-color:#a99159}#openMiokoRoom.active{background:#dfc17f;color:#112030}
+#app .exitBtn{border-color:#69505a!important;background:transparent;color:#dcc9cf}
+#app main{padding-top:20px}.hero{grid-template-columns:minmax(0,1fr) auto;align-items:center;padding:18px 22px;gap:18px}
+.hero h1{font-size:clamp(23px,4vw,32px);line-height:1.2;margin:8px 0 10px}.hero p{font-size:14px;line-height:1.55;margin:0}
+.hero .mioko{background:none;padding:0;min-width:100px}.hero .miokoPortrait{width:82px;height:82px;margin:0 auto 6px}.hero .mioko h2{font-size:15px;margin:0}.hero .mioko span{font-size:11px}
+.portalMioko{display:flex;align-items:center;gap:20px;padding:20px;border:1px solid #31475f;border-radius:18px;background:linear-gradient(110deg,#17283d,#0c1829);margin:20px 0}
+.portalMioko>img{display:block;width:90px;height:115px;object-fit:contain;background:#08101c;border-radius:12px}.portalMioko b{font-size:21px;color:#f1d292}.portalMioko p{margin:4px 0 12px;font-size:14px}.portalMioko button{background:#dfc17f;border-color:#dfc17f;color:#112030}
+.portalGrid .panel{box-shadow:none;border-color:#293d55;background:#0d1828}.portalSummary span{font-size:14px;padding:12px 16px}
+#app footer{padding:22px 20px;color:#8095af;font-size:12px}#app footer .miokoPublicLinks{max-width:900px;margin:0 auto 14px}
+@media(max-width:760px){
+ #login .loginCard{padding:16px!important;width:94vw!important}.nb{padding:11px 13px;font-size:14px}
+ #app header{padding:14px 18px;gap:12px}#app header nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:7px}#app header nav .nb{font-size:12px;padding:11px 7px;min-width:0;white-space:normal}
+ #app header nav #openMiokoRoom{font-size:13px}#app main{padding:18px 14px}.hero{grid-template-columns:minmax(0,1fr) 82px;padding:16px;gap:12px}.hero .mioko{min-width:0}.hero .miokoPortrait{width:70px;height:70px}.hero .mioko span{display:none}.hero>div>small{font-size:10px}.hero h1{font-size:23px}.hero p{font-size:13px}
+ .tools,.quick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tools>.nb,.quick>.nb{width:100%;min-width:0;font-size:13px;text-align:center}
+ .langs{gap:6px}.langs .nb{flex:1 1 28%;padding:10px 6px;font-size:12px}.panel{padding:17px}.roomHead h2{font-size:21px}.roomHead>button{width:100%}
+ #userVideoBox{min-height:95px;padding:12px}#userVideoBox .big{font-size:34px}#miokoVideo .miokoVideoPortrait{height:clamp(260px,52vh,420px)}
+ .portalMioko{padding:16px;gap:14px}.portalMioko>img{width:72px;height:100px}.portalMioko b{font-size:19px}.portalMioko p{font-size:13px}.portalMioko button{font-size:13px}
+ .miokoPublicLinks{gap:4px 18px}#login .miokoPublicLinks a{font-size:13px}
+}

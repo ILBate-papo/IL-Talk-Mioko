@@ -23,6 +23,14 @@
     catch { status.textContent = 'Não foi possível salvar. Verifique o armazenamento do navegador.'; return false; }
   };
   const button = (text, action) => { const b = node('button', text, 'nb'); b.type = 'button'; b.onclick = action; return b; };
+  const roomButton = document.getElementById('openMiokoRoom');
+  if (roomButton) roomButton.onclick = () => open('aula');
+  function roomShortcut(page) {
+    const card = node('div', undefined, 'portalMioko');
+    const portrait = node('img'); portrait.src = 'assets/mioko-anime.webp'; portrait.alt = 'Mioko San, professora virtual';
+    const text = node('div'); text.append(node('b', 'Mioko San'), node('p', 'Sua professora está na sala de conversa.'), button('Abrir sala da Mioko', () => goToLesson()));
+    card.append(portrait, text); page.append(card);
+  }
   const statusNode = () => { const s = node('p'); s.setAttribute('role', 'status'); return s; };
   function field(parent, title, tag, id, value = '') {
     const label = node('label', title); label.htmlFor = id;
@@ -38,6 +46,7 @@
   function renderStudent() {
     student.replaceChildren(node('small', 'SEU ESPAÇO DE ESTUDO'), node('h1', 'Página do aluno'));
     student.append(node('p', 'Continue sua conversa, organize seus objetivos e consulte o que ficou salvo neste aparelho.'));
+    roomShortcut(student);
     let history = [], course = {};
     try { history = JSON.parse(localStorage.getItem('ilMiokoHistory:' + user()) || '[]'); if (!Array.isArray(history)) history = []; } catch {}
     try { course = JSON.parse(localStorage.getItem('ilMiokoCourseLevels:' + user()) || '{}') || {}; } catch {}
@@ -63,6 +72,7 @@
   function renderTeacher() {
     teacher.replaceChildren(node('small', 'PLANEJAMENTO DE AULAS'), node('h1', 'Página do professor'));
     teacher.append(node('p', 'Prepare atividades, guarde seus planos e leve uma proposta para a sala da Mioko.'));
+    roomShortcut(teacher);
     const grid = node('div', undefined, 'portalGrid'), editor = node('section', undefined, 'panel'), saved = node('section', undefined, 'panel');
     editor.append(node('h2', 'Preparar aula')); saved.append(node('h2', 'Meus planos salvos'));
     let editing = null;
@@ -113,9 +123,10 @@
     current = page;
     student.hidden = page !== 'aluno'; teacher.hidden = page !== 'professor'; lesson.hidden = page !== 'aula';
     if (page === 'aluno') renderStudent(); if (page === 'professor') renderTeacher();
-    document.querySelectorAll('[data-mode]').forEach(b => { const selected = b.dataset.mode === (page === 'professor' ? 'Professor' : 'Aluno'); b.classList.toggle('active', selected); b.setAttribute('aria-current', selected ? 'page' : 'false'); });
+    document.querySelectorAll('[data-mode]').forEach(b => { const selected = b.dataset.mode === (page === 'professor' ? 'Professor' : page === 'aluno' ? 'Aluno' : ''); b.classList.toggle('active', selected); b.setAttribute('aria-current', selected ? 'page' : 'false'); });
+    if (roomButton) {roomButton.classList.toggle('active', page === 'aula'); roomButton.setAttribute('aria-current', page === 'aula' ? 'page' : 'false');}
     history.replaceState(null, '', '#' + page);
-    main.scrollIntoView({block:'start'}); return true;
+    (page === 'aula' ? document.querySelector('#videoRoom') : main).scrollIntoView({block:'start'}); return true;
   }
   window.MiokoPortal = {open, reset() {student.replaceChildren(); teacher.replaceChildren(); student.hidden = teacher.hidden = true; lesson.hidden = false; current = 'aula';}};
   window.addEventListener('hashchange', () => open(location.hash.slice(1)));
