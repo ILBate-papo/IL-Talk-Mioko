@@ -664,10 +664,12 @@
     $("#login").classList.add("hide");
     $("#app").classList.remove("hide");
     prepareAudio();
+    window.MiokoPortal?.open(location.hash.slice(1) || "aluno");
   };
 
   $("#exitCourse").onclick = () => {
     stopMedia();
+    window.MiokoPortal?.reset();
     window.MiokoAuth?.signOut();
     history = []; historyKey = "";
     $("#chat").replaceChildren();
@@ -679,12 +681,12 @@
 
   document.querySelectorAll("[data-mode]").forEach(b => {
     b.onclick = () => {
-      document.querySelectorAll("[data-mode]").forEach(x =>
-        x.classList.remove("active")
-      );
-      b.classList.add("active");
+      const pages = {Aluno:"aluno", Professor:"professor", Administração:"admin"};
+      window.MiokoPortal?.open(pages[b.dataset.mode]);
     };
   });
+
+  window.addEventListener("mioko-leave-lesson", () => stopMedia());
 
   // Italian replaces the former generic language option.
   const otherLanguage = document.querySelector('[data-lang="Outro"]');

@@ -2,7 +2,7 @@
   const $=s=>document.querySelector(s),c=window.IL_TALK_CONFIG||{};
   const base='https://'+c.SUPABASE_PROJECT_REF+'.supabase.co',key=c.SUPABASE_PUBLISHABLE_KEY||c.SUPABASE_ANON_KEY;
   let session=null,snapshot=null;
-  function lock(){session=null;snapshot=null;$('#adminApp').hidden=true;$('#adminLogin').hidden=false;for(const sel of ['#metrics','#clients','#requests','#leads','#countries','#cities','#chart','#paymentUser'])$(sel).replaceChildren();$('#paymentReference').value='';$('#receivedConfirmed').checked=false;}
+  function lock(){session=null;snapshot=null;$('#adminApp').hidden=true;$('#adminLogin').hidden=false;for(const sel of ['#metrics','#clients','#requests','#leads','#countries','#cities','#chart','#paymentUser','#countryHighlights'])$(sel).replaceChildren();$('#paymentReference').value='';$('#receivedConfirmed').checked=false;}
   const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((v||0)/100);
   const number=v=>new Intl.NumberFormat('pt-BR').format(v||0);
   const date=v=>v?new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(new Date(v)):'—';
@@ -49,6 +49,13 @@
     const cards=[['Visitas',number(m.visits),'no período'],['Visitantes estimados',number(m.visitor_sessions),'sessões do navegador'],['Cadastros',number(m.registrations),number(m.registered_total)+' no total'],['Pagantes ativos',number(m.active_paid),'acesso vigente'],['Leads',number(m.leads),'interessados no período'],['Leads que viraram clientes',number(m.converted_leads),conversion.toFixed(1).replace('.',',')+'% dos leads do período'],['Cliques em pagamento',number(m.checkout_clicks),'interesse em pagar'],['Recebimentos confirmados',money(m.revenue_cents),'confirmados por você no período']];
     $('#metrics').replaceChildren(...cards.map(([label,value,detail],i)=>{const e=node('div',null,'metric'+([3,7].includes(i)?' highlight':''));e.append(node('span',label),node('strong',value),node('span',detail));return e;}));
     chart(d.daily);$('#trackingNote').textContent=d.tracking_started_at?'Primeiro acesso registrado: '+date(d.tracking_started_at)+'. Cadastros e pagamentos usam os registros do servidor.':'Ainda não há visitas registradas. Não recuperamos visitas anteriores à ativação das estatísticas.';
+    const highlights = $('#countryHighlights'); highlights.replaceChildren();
+    d.countries.slice(0, 6).forEach(row => {
+      const card = node('div', null, 'countryCard');
+      const icon = node('span', flag(row.country_code), 'countryFlag'); icon.setAttribute('aria-hidden', 'true');
+      card.append(icon, node('b', country(row.country_code)), node('span', number(row.visits) + ' visitas'));
+      highlights.append(card);
+    });
     table('#countries',['País','Visitas'],d.countries.map(x=>[geoLabel(x.country_code),number(x.visits)]));
     table('#cities',['Cidade / país','Visitas'],d.cities.map(x=>[geoLabel(x.country_code,x.city),number(x.visits)]));
     table('#clients',['E-mail','Cadastro','Situação','Acesso até'],d.accounts.map(x=>[x.email,date(x.created_at),accessLabel(x),date(x.paid_until)]));
@@ -65,4 +72,18 @@
   $('#logout').onclick=()=>{const old=session;lock();if(old?.access_token)authRequest('/auth/v1/logout?scope=local',{},old.access_token).catch(()=>{});};
   $('#confirmForm').onsubmit=async e=>{e.preventDefault();$('#confirmPayment').disabled=true;$('#paymentStatus').textContent='Conferindo registro…';try{const d=await api({action:'confirm_payment',user_id:$('#paymentUser').value,method:$('#paymentMethod').value,reference:$('#paymentReference').value,received_confirmed:$('#receivedConfirmed').checked});$('#paymentStatus').textContent=d.already_confirmed?'Esta transação já estava confirmada. O prazo não foi duplicado.':'Recebimento registrado. Acesso liberado até '+date(d.paid_until)+'.';$('#paymentReference').value='';$('#receivedConfirmed').checked=false;await refresh();}catch(e){$('#paymentStatus').textContent=e.message;}finally{$('#confirmPayment').disabled=false;}};
   $('#settingsForm').onsubmit=async e=>{e.preventDefault();$('#saveSettings').disabled=true;try{await api({action:'settings',price_cents:Math.round(Number($('#price').value)*100),access_days:Number($('#accessDays').value),pix_key:$('#pixKey').value,pix_owner:$('#pixOwner').value,pix_bank:$('#pixBank').value,mercado_pago_url:$('#mercadoPagoUrl').value});$('#settingsStatus').textContent='Cobrança salva. Os dados atualizados aparecerão no site.';await refresh();}catch(e){$('#settingsStatus').textContent=e.message;}finally{$('#saveSettings').disabled=false;}};
+  // Reuse the course session on the same origin; the server still verifies administrator access.
+  if (new URLSearchParams(location.search).get('from') === 'curso') {
+    (async () => {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('mioko_auth_session_v1') || 'null');
+        if (!saved?.access_token) return;
+        session = saved;
+        $('#loginStatus').textContent = 'Conferindo acesso de administrador…';
+        const data = await api({action:'snapshot', days:30});
+        render(data); $('#adminLogin').hidden = true; $('#adminApp').hidden = false;
+        $('#loginStatus').textContent = '';
+      } catch (error) { lock(); $('#loginStatus').textContent = error.message; }
+    })();
+  }
 })();
