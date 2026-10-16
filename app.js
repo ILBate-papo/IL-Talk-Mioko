@@ -1015,11 +1015,7 @@
       const file = e.target.files[0];
       e.target.value = "";
       if (!file) return;
-      // Preserve the native app's existing handlers; connect documents on the website.
-      if (window.MiokoNativeMicrophone || window.__miokoNativeInstalled) {
-        add("user", "Arquivo selecionado: " + file.name + " (upload ainda não conectado ao serviço).");
-        return;
-      }
+      // Android and browser attachments use the same authenticated document service.
       const conversation = conversationGeneration;
       replyQueue = replyQueue.catch(() => {}).then(async () => {
         if (conversation !== conversationGeneration) return;
