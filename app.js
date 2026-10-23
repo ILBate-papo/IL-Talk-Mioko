@@ -242,7 +242,7 @@
 
   function resumeListening(delay = 400) {
     clearTimeout(listenTimer);
-    if (callMode && !micPaused && !voiceInputBlocked) {
+    if (callMode && !micPaused && !voiceInputBlocked && !composerBusy()) {
       listenTimer = setTimeout(startListening, Math.max(delay, aiCooldownUntil - Date.now()));
     }
   }
@@ -799,18 +799,45 @@
     );
   }
 
+  // Keep the keyboard draft independent from every microphone backend.
+  let composerEditing = false;
+  let composerComposing = false;
+  function composerBusy() {
+    return composerEditing || composerComposing || Boolean($("#text").value.trim());
+  }
+  function sendVoice(value) {
+    const spoken = String(value || "").trim();
+    if (composerBusy() || !/[\p{L}\p{N}]/u.test(spoken)) return;
+    return send(spoken);
+  }
+  function pauseForTyping() {
+    composerEditing = true;
+    stopListening();
+    if (callMode) callStatus("Microfone pausado enquanto você escreve. Toque em ENVIAR quando terminar.");
+  }
+  $("#text").addEventListener("focus", pauseForTyping);
+  $("#text").addEventListener("input", pauseForTyping);
+  $("#text").addEventListener("compositionstart", () => { composerComposing = true; pauseForTyping(); });
+  $("#text").addEventListener("compositionend", () => { composerComposing = false; });
+  $("#text").addEventListener("blur", () => {
+    composerEditing = false;
+    // A draft remains protected even after the keyboard closes.
+    if (!composerBusy()) resumeListening(500);
+  });
+
   function send(value) {
+    const fromComposer = value === undefined;
     const message = String(value ?? $("#text").value).trim();
     if (!message) return;
     if (/^(?:mioko(?:[ -]san)?[,! ]*)?(?:que horas são|qual (?:é )?a hora|what time is it|今何時|¿?qué hora es|che ore sono)[?？.! ]*$/i.test(message)) {
       const now = new Date().toLocaleTimeString(locale(), {hour:"2-digit",minute:"2-digit"});
       add("user", message, true); add("ai", now, true);
       if (voice) { prepareAudio(); stopListening(); stopSpeech(); say(now, [{locale:locale(),text:now}]); }
-      $("#text").value=""; return;
+      if (fromComposer) $("#text").value=""; return;
     }
     if (Date.now() < aiCooldownUntil) { callStatus("Serviço temporariamente ocupado. Aguarde " + Math.ceil((aiCooldownUntil-Date.now())/1000) + " segundos."); return; }
     if (voice) prepareAudio();
-    $("#text").value = "";
+    if (fromComposer) $("#text").value = "";
     stopListening();
     stopSpeech();
     const conversation = conversationGeneration;
@@ -908,6 +935,7 @@
 
   $("#send").onclick = () => send();
   $("#text").onkeydown = e => {
+    if (e.isComposing || composerComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
@@ -1130,7 +1158,7 @@
       if (token !== recordingGeneration) return;
       if (!response.ok) throw Error(data.error || "Falha ao entender a fala");
       listening = false;
-      if (data.text?.trim()) send(data.text);
+      if (data.text?.trim()) sendVoice(data.text);
       else resumeListening(1000);
     } catch (error) {
       releasePermissionWait(); clearTimeout(deadline);
@@ -1196,7 +1224,7 @@
           if(token !== recordingGeneration) return;
           if(!response.ok) throw Error(data.error || "Falha ao entender a fala");
           listening=false;
-          if(data.text?.trim()) send(data.text); else { $("#mic").textContent="🎙️ Não entendi. Fale novamente e faça uma pausa."; resumeListening(1000); }
+          if(data.text?.trim()) sendVoice(data.text); else { $("#mic").textContent="🎙️ Não entendi. Fale novamente e faça uma pausa."; resumeListening(1000); }
         } catch(e) {
           if(token !== recordingGeneration) return;
           listening=false; voiceInputBlocked=true;
@@ -1234,7 +1262,7 @@
     if (
       !callMode || recognition || listening ||
       currentAudio || nativeUtterance || speechPending ||
-      attachmentPicking || replyPending || voiceInputBlocked || micPaused || Date.now() < aiCooldownUntil
+      attachmentPicking || replyPending || voiceInputBlocked || micPaused || composerBusy() || Date.now() < aiCooldownUntil
     ) return;
 
     if (window.MiokoNativeMicrophone) { startNativeListening(); return; }
@@ -1264,7 +1292,7 @@
       $("#mic").textContent = preview ? "🎙️ " + preview.slice(0, 80) : "🎙️ Ouvindo...";
       const spoken = final.map(result => result[0].transcript).join(" ").trim();
       if (spoken) recognitionFailures = 0;
-      if (spoken && !replyPending && !speechPending && !nativeUtterance && !currentAudio) send(spoken);
+      if (spoken && !replyPending && !speechPending && !nativeUtterance && !currentAudio) sendVoice(spoken);
     };
     r.onend = () => {
       if (recognition !== r) return;
@@ -1307,6 +1335,13 @@
   }
 
   $("#mic").onclick = () => {
+    if ($("#text").value.trim() || composerComposing) {
+      callStatus("Envie ou apague seu texto antes de voltar ao microfone.");
+      $("#text").focus();
+      return;
+    }
+    composerEditing = false;
+    $("#text").blur();
 
     const interrupted = speechPending || currentAudio || nativeUtterance || replyPending;
     if (listening && !interrupted) {
@@ -1404,8 +1439,3 @@
 
   window.addEventListener("pagehide", handleMediaPageHide);
 })();
-
-
-
-
-
