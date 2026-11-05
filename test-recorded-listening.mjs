@@ -23,9 +23,10 @@ const c=vm.createContext({window:{MediaRecorder:Recorder},MediaRecorder:Recorder
  $:()=>({textContent:''}),finishTurnButton:button,callStatus:t=>status.push(t),voiceInputBlocked:false,
  inputLocale:()=> 'pt-BR',lang:'Japonês',headers:async()=>({Authorization:'Bearer test'}),config:()=>({VOICE_ENDPOINT:'https://example.test/voice'}),
  fetch:async(u,o)=>{requests++;assert.equal(o.body.has('language'),false,'no forced Portuguese hint for Japanese speech');return Response.json({text:transcript});},
- send:t=>messages.push(t),resumeListening:()=>{},add:()=>{},FormData,Blob,Response,AbortSignal,Float32Array,queueMicrotask
+ send:t=>messages.push(t),composerBusy:()=>false,resumeListening:()=>{},add:()=>{},FormData,Blob,Response,AbortSignal,Float32Array,queueMicrotask
 });
-vm.runInContext(source.slice(start,end),c);
+const sendVoice=source.slice(source.indexOf('  function sendVoice(value)'),source.indexOf('  function pauseForTyping()'));
+vm.runInContext(sendVoice+source.slice(start,end),c);
 await vm.runInContext('startRecordedListening()',c);
 assert.equal(button.hidden,false);
 for(let i=0;i<10;i++){now+=100;level=.002;interval();}
@@ -43,4 +44,7 @@ vm.runInContext('recorderSubmit()',c);
 for(let i=0;i<8;i++)await new Promise(resolve=>setImmediate(resolve));
 assert.equal(requests,2);
 assert.equal(messages.length,2);assert.equal(messages[1],'今日は元気ですか？','Japanese transcript reaches AI unchanged');
+c.composerBusy=()=>true;
+vm.runInContext('sendVoice("Não substituir o rascunho")',c);
+assert.equal(messages.length,2,'transcription cannot interrupt a keyboard draft');
 console.log('Passed: Android recorder selection, pause-to-transcription-to-AI pipeline, manual completion and microphone cleanup.');

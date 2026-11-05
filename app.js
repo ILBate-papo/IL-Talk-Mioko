@@ -114,6 +114,8 @@
   let voiceRetryAfter = 0;
   let listenTimer = 0;
   let replyQueue = Promise.resolve();
+  let replyReservation = 0;
+  let replySequence = 0;
   let conversationGeneration = 0;
   let replyController = null;
   let recognitionFailures = 0;
@@ -140,6 +142,39 @@
   };
   $("#miokoVideo").append(finishTurnButton);
   const callStatus = text => { turnStatus.textContent = text; };
+  const cancelReplyButton = document.createElement("button");
+  cancelReplyButton.type = "button";
+  cancelReplyButton.className = "nb";
+  cancelReplyButton.textContent = "Cancelar resposta";
+  cancelReplyButton.hidden = true;
+  cancelReplyButton.onclick = () => {
+    conversationGeneration++;
+    replyReservation = 0;
+    replyController?.abort();
+    replyPending = false;
+    cancelReplyButton.hidden = true;
+    callStatus("Resposta cancelada. Você pode enviar outra pergunta.");
+    resumeListening();
+  };
+  $("#miokoVideo").append(cancelReplyButton);
+
+  // Include token refresh and response-body reads in cancellation. Aborting
+  // fetch alone cannot release a turn that is still waiting for credentials.
+  function abortableReply(work, signal) {
+    return new Promise((resolve, reject) => {
+      const aborted = () => {
+        const error = new Error("Resposta interrompida");
+        error.name = "AbortError";
+        reject(error);
+      };
+      if (signal.aborted) { aborted(); return; }
+      signal.addEventListener("abort", aborted, {once: true});
+      Promise.resolve().then(() => {
+        if (signal.aborted) { aborted(); return; }
+        return work();
+      }).then(resolve, reject).finally(() => signal.removeEventListener("abort", aborted));
+    });
+  }
 
   function voiceLabel() {
     $("#voice").textContent =
@@ -203,7 +238,11 @@
       result.apikey = c.SUPABASE_ANON_KEY;
       result.Authorization = "Bearer " + c.SUPABASE_ANON_KEY;
     }
-    const token = await window.MiokoAuth?.requireAccess();
+    // Every AI/voice/document endpoint checks access on the server. Refresh
+    // the token here without repeating the separate access request each minute.
+    const token = await (window.MiokoAuth?.getToken
+      ? window.MiokoAuth.getToken()
+      : window.MiokoAuth?.requireAccess());
     if (!token) throw Error("Entre com seu e-mail e senha.");
     result.Authorization = "Bearer " + token;
     return result;
@@ -829,6 +868,10 @@
     const fromComposer = value === undefined;
     const message = String(value ?? $("#text").value).trim();
     if (!message) return;
+    if (replyReservation || replyPending) {
+      callStatus("Já estou respondendo. Você pode cancelar a resposta para enviar outra pergunta.");
+      return;
+    }
     if (/^(?:mioko(?:[ -]san)?[,! ]*)?(?:que horas são|qual (?:é )?a hora|what time is it|今何時|¿?qué hora es|che ore sono)[?？.! ]*$/i.test(message)) {
       const now = new Date().toLocaleTimeString(locale(), {hour:"2-digit",minute:"2-digit"});
       add("user", message, true); add("ai", now, true);
@@ -841,9 +884,12 @@
     stopListening();
     stopSpeech();
     const conversation = conversationGeneration;
+    const reservation = ++replySequence;
+    replyReservation = reservation;
     replyQueue = replyQueue
       .catch(() => {})
-      .then(() => { if (conversation === conversationGeneration) return sendMessage(message, conversation); });
+      .then(() => { if (conversation === conversationGeneration) return sendMessage(message, conversation); })
+      .finally(() => { if (replyReservation === reservation) replyReservation = 0; });
     return replyQueue;
   }
 
@@ -863,12 +909,18 @@
     callStatus("Preparando sua resposta…");
     const controller = new AbortController();
     replyController = controller;
+    cancelReplyButton.hidden = false;
     const requestLanguage = lang;
     const timeout = setTimeout(() => controller.abort(), 60000);
     try {
-      const r = await fetch(ep, {
+      const {r, raw} = await abortableReply(async () => {
+        const requestHeaders = await headers();
+        if (controller.signal.aborted) {
+          const error = new Error("Resposta interrompida"); error.name = "AbortError"; throw error;
+        }
+        const r = await fetch(ep, {
         method: "POST",
-        headers: await headers(),
+        headers: requestHeaders,
         signal: controller.signal,
         body: JSON.stringify({
           message,
@@ -882,8 +934,9 @@
           language: lang,
           history: history.slice(0, -1).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
         })
-      });
-      const raw = await r.text();
+        });
+        return {r, raw: await r.text()};
+      }, controller.signal);
       if (conversation !== conversationGeneration) { waiting.remove(); return; }
       let data;
       try { data = JSON.parse(raw); }
@@ -925,7 +978,10 @@
       add("ai", notice + (!limited && !quota ? " Detalhe: " + e.message : ""));
     } finally {
       clearTimeout(timeout);
-      if (replyController === controller) replyController = null;
+      if (replyController === controller) {
+        replyController = null;
+        cancelReplyButton.hidden = true;
+      }
       replyPending = false;
       if (!speechPending && !currentAudio && !nativeUtterance) {
         resumeListening(500);
