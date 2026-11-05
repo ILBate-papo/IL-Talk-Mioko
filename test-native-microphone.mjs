@@ -40,12 +40,15 @@ const native=app.slice(app.indexOf('  async function startNativeListening()'),ap
 let now=0, releaseCapture, onLevel, sent=[], requestCount=0, cancelledCount=0;
 const button={hidden:true};
 const c=vm.createContext({window:{MiokoNativeMicrophone:{start:fn=>{onLevel=fn;return new Promise(resolve=>{releaseCapture=resolve;});},finish:()=>releaseCapture(new Blob(['sample'],{type:'audio/mp4'})),cancel:()=>{cancelledCount++;releaseCapture(null);}}},
-recordingGeneration:0,listening:false,recorderStop:null,recorderSubmit:null,pendingMediaRequests:0,finishTurnButton:button,
+recordingGeneration:0,listening:false,recorderStop:null,recorderSubmit:null,pendingMediaRequests:0,finishTurnButton:button,transcriptionController:null,transcriptionPending:false,retryListeningButton:{hidden:true},
 performance:{now:()=>now},setTimeout:()=>1,clearTimeout:()=>{},callStatus:()=>{},$:()=>({textContent:''}),
 headers:async()=>({'Content-Type':'application/json',Authorization:'Bearer test'}),config:()=>({VOICE_ENDPOINT:'https://test.invalid'}),
 fetch:async(url,args)=>{requestCount++;assert.equal(args.body.get('file').type,'audio/mp4');assert.equal(args.headers['Content-Type'],undefined);return Response.json({text:'Olá, Mioko'});},
-send:text=>sent.push(text),resumeListening:()=>{},microphoneFailure:error=>{throw error;},Blob,FormData,Response,AbortSignal});
-vm.runInContext(detector+native,c);
+send:text=>sent.push(text),composerBusy:()=>false,resumeListening:()=>{},microphoneFailure:error=>{throw error;},Blob,FormData,Response,AbortSignal,AbortController});
+const abortable=app.slice(app.indexOf('  function abortableReply('),app.indexOf('  function voiceLabel()'));
+const transcription=app.slice(app.indexOf('  async function transcribeSpeech('),app.indexOf('  function createTurnDetector()'));
+const sendVoice=app.slice(app.indexOf('  function sendVoice(value)'),app.indexOf('  function pauseForTyping()'));
+vm.runInContext(abortable+transcription+sendVoice+detector+native,c);
 const turn=vm.runInContext('startNativeListening()',c);
 for(let i=0;i<10;i++){now+=100;onLevel(.002);}
 for(let i=0;i<12;i++){now+=100;onLevel(.08);}

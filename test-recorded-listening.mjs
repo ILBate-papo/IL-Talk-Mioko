@@ -18,15 +18,17 @@ class Recorder {
  stop(){this.state='inactive';this.ondataavailable?.({data:new Blob(['microphone sample'],{type:this.mimeType})});queueMicrotask(()=>this.onstop?.());}
 }
 const c=vm.createContext({window:{MediaRecorder:Recorder},MediaRecorder:Recorder,navigator:{mediaDevices:{getUserMedia:async()=>mic}},
- recordingGeneration:0,listening:false,recorderStop:null,recorderSubmit:null,audioContext:{createMediaStreamSource:()=>({connect:()=>{},disconnect:()=>{}}),createAnalyser:()=>meter},
+ recordingGeneration:0,listening:false,recorderStop:null,recorderSubmit:null,transcriptionController:null,transcriptionPending:false,retryListeningButton:{hidden:true},audioContext:{createMediaStreamSource:()=>({connect:()=>{},disconnect:()=>{}}),createAnalyser:()=>meter},
  requestMedia:async()=>mic,microphoneFailure:error=>{throw error;},unlockAudio:async()=>{},performance:{now:()=>now},setInterval:fn=>{interval=fn;return 1;},clearInterval:()=>{},
  $:()=>({textContent:''}),finishTurnButton:button,callStatus:t=>status.push(t),voiceInputBlocked:false,
  inputLocale:()=> 'pt-BR',lang:'Japonês',headers:async()=>({Authorization:'Bearer test'}),config:()=>({VOICE_ENDPOINT:'https://example.test/voice'}),
  fetch:async(u,o)=>{requests++;assert.equal(o.body.has('language'),false,'no forced Portuguese hint for Japanese speech');return Response.json({text:transcript});},
- send:t=>messages.push(t),composerBusy:()=>false,resumeListening:()=>{},add:()=>{},FormData,Blob,Response,AbortSignal,Float32Array,queueMicrotask
+ send:t=>messages.push(t),composerBusy:()=>false,resumeListening:()=>{},add:()=>{},FormData,Blob,Response,AbortSignal,AbortController,Float32Array,queueMicrotask,setTimeout,clearTimeout
 });
 const sendVoice=source.slice(source.indexOf('  function sendVoice(value)'),source.indexOf('  function pauseForTyping()'));
-vm.runInContext(sendVoice+source.slice(start,end),c);
+const abortable=source.slice(source.indexOf('  function abortableReply('),source.indexOf('  function voiceLabel()'));
+const transcription=source.slice(source.indexOf('  async function transcribeSpeech('),source.indexOf('  function createTurnDetector()'));
+vm.runInContext(abortable+transcription+sendVoice+source.slice(start,end),c);
 await vm.runInContext('startRecordedListening()',c);
 assert.equal(button.hidden,false);
 for(let i=0;i<10;i++){now+=100;level=.002;interval();}

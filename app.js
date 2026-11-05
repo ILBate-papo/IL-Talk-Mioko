@@ -122,6 +122,8 @@
   let recorderStop = null;
   let recorderSubmit = null;
   let recordingGeneration = 0;
+  let transcriptionController = null;
+  let transcriptionPending = false;
   const preferRecorder = /Android/i.test(navigator.userAgent || "") || !(window.SpeechRecognition || window.webkitSpeechRecognition);
   let useRecorder = preferRecorder;
 
@@ -157,6 +159,19 @@
     resumeListening();
   };
   $("#miokoVideo").append(cancelReplyButton);
+  const retryListeningButton = document.createElement("button");
+  retryListeningButton.type = "button";
+  retryListeningButton.className = "nb";
+  retryListeningButton.textContent = "Tentar ouvir novamente";
+  retryListeningButton.hidden = true;
+  retryListeningButton.onclick = () => {
+    stopListening();
+    voiceInputBlocked = false;
+    micPaused = false;
+    callStatus("Pode falar novamente.");
+    resumeListening(0);
+  };
+  $("#miokoVideo").append(retryListeningButton);
 
   // Include token refresh and response-body reads in cancellation. Aborting
   // fetch alone cannot release a turn that is still waiting for credentials.
@@ -314,6 +329,10 @@
   function stopListening() {
     clearTimeout(listenTimer);
     recordingGeneration++;
+    transcriptionController?.abort();
+    transcriptionController = null;
+    transcriptionPending = false;
+    retryListeningButton.hidden = true;
     recorderStop?.();
     recorderStop = null;
     recorderSubmit = null;
@@ -909,7 +928,16 @@
   }
   function sendVoice(value) {
     const spoken = String(value || "").trim();
-    if (composerBusy() || !/[\p{L}\p{N}]/u.test(spoken)) return;
+    if (composerBusy()) {
+      callStatus("Sua fala não substituiu o texto que você está escrevendo. Envie ou apague o rascunho para voltar ao microfone.");
+      return false;
+    }
+    if (!/[\p{L}\p{N}]/u.test(spoken)) {
+      voiceInputBlocked = true;
+      callStatus("Não entendi nenhuma palavra. Toque em Tentar ouvir novamente ou escreva sua pergunta.");
+      retryListeningButton.hidden = false;
+      return false;
+    }
     return send(spoken);
   }
   function pauseForTyping() {
@@ -1212,6 +1240,54 @@
 
 
   // A pause ends a turn; a short pause inside a sentence does not.
+  async function transcribeSpeech(blob, filename) {
+    const controller = new AbortController();
+    transcriptionController?.abort();
+    transcriptionController = controller;
+    transcriptionPending = true;
+    retryListeningButton.hidden = false;
+    const deadline = setTimeout(() => controller.abort(), 20000);
+    try {
+      return await abortableReply(async () => {
+        const h = await headers();
+        if (controller.signal.aborted) {
+          const error = new Error("Escuta interrompida"); error.name = "AbortError"; throw error;
+        }
+        delete h["Content-Type"];
+        const form = new FormData();
+        form.append("file", blob, filename);
+        // A learner may switch languages within a course; do not force a hint.
+        const response = await fetch(config().VOICE_ENDPOINT, {
+          method: "POST", headers: h, body: form, signal: controller.signal
+        });
+        const data = await response.json();
+        if (!response.ok) throw Error(data.error || "Falha ao entender a fala");
+        return typeof data.text === "string" ? data.text.trim() : "";
+      }, controller.signal);
+    } finally {
+      clearTimeout(deadline);
+      if (transcriptionController === controller) {
+        transcriptionController = null;
+        transcriptionPending = false;
+        retryListeningButton.hidden = true;
+      }
+    }
+  }
+
+  function transcriptionFailure(error) {
+    listening = false;
+    recorderStop = recorderSubmit = null;
+    finishTurnButton.hidden = true;
+    voiceInputBlocked = true;
+    const notice = error.name === "AbortError"
+      ? "A conversão da fala demorou demais. Toque em Tentar ouvir novamente ou envie sua pergunta por texto."
+      : "Não consegui entender a fala. Toque em Tentar ouvir novamente ou envie sua pergunta por texto.";
+    callStatus(notice);
+    $("#mic").textContent = "🎙️ Tentar microfone novamente";
+    retryListeningButton.hidden = false;
+    add("ai", notice);
+  }
+
   function createTurnDetector() {
     const levels = [];
     let heard = false, quietSince = null, voicedFrames = 0;
@@ -1238,7 +1314,7 @@
     listening = true;
     callStatus("Abrindo o microfone do Android…");
     const detector = createTurnDetector();
-    let heard = false, submitted = false, waitingForMicrophone = true;
+    let heard = false, submitted = false, waitingForMicrophone = true, transcribing = false;
     pendingMediaRequests++;
     const releasePermissionWait = () => { if (waitingForMicrophone) { waitingForMicrophone = false; pendingMediaRequests--; } };
     const finish = () => {
@@ -1267,17 +1343,11 @@
       finishTurnButton.hidden = true;
       if (!blob || !heard) { listening = false; resumeListening(500); return; }
       callStatus("Entendendo sua fala…");
-      const form = new FormData();
-      form.append("file", blob, "fala.m4a");
-      const h = await headers(); delete h["Content-Type"];
-      const response = await fetch(config().VOICE_ENDPOINT, {
-        method: "POST", headers: h, body: form, signal: AbortSignal.timeout(30000)
-      });
-      const data = await response.json();
+      transcribing = true;
+      const text = await transcribeSpeech(blob, "fala.m4a");
       if (token !== recordingGeneration) return;
-      if (!response.ok) throw Error(data.error || "Falha ao entender a fala");
       listening = false;
-      if (data.text?.trim()) sendVoice(data.text);
+      if (text) sendVoice(text);
       else resumeListening(1000);
     } catch (error) {
       releasePermissionWait(); clearTimeout(deadline);
@@ -1285,7 +1355,8 @@
       listening = false;
       recorderStop = recorderSubmit = null;
       finishTurnButton.hidden = true;
-      microphoneFailure(error);
+      if (transcribing) transcriptionFailure(error);
+      else microphoneFailure(error);
     }
   }
 
@@ -1333,22 +1404,14 @@
         $("#mic").textContent="🎙️ Entendendo sua fala...";
         callStatus("Entendendo sua fala…");
         try {
-          const form = new FormData();
           const type=rec.mimeType || "audio/webm";
-          form.append("file",new Blob(chunks,{type}),type.includes("mp4")?"fala.mp4":type.includes("ogg")?"fala.ogg":"fala.webm");
-          // Omit the language hint: students may switch languages in the same course.
-          const h=await headers(); delete h["Content-Type"];
-          const response=await fetch(config().VOICE_ENDPOINT,{method:"POST",headers:h,body:form,signal:AbortSignal.timeout(30000)});
-          const data=await response.json();
+          const text=await transcribeSpeech(new Blob(chunks,{type}),type.includes("mp4")?"fala.mp4":type.includes("ogg")?"fala.ogg":"fala.webm");
           if(token !== recordingGeneration) return;
-          if(!response.ok) throw Error(data.error || "Falha ao entender a fala");
           listening=false;
-          if(data.text?.trim()) sendVoice(data.text); else { $("#mic").textContent="🎙️ Não entendi. Fale novamente e faça uma pausa."; resumeListening(1000); }
+          if(text) sendVoice(text); else { $("#mic").textContent="🎙️ Não entendi. Fale novamente e faça uma pausa."; resumeListening(1000); }
         } catch(e) {
           if(token !== recordingGeneration) return;
-          listening=false; voiceInputBlocked=true;
-          callStatus("Não consegui entender a fala. Toque em Microfone para tentar novamente.");
-          add("ai","Microfone: " + e.message + ". Toque no microfone para tentar novamente.");
+          transcriptionFailure(e);
         }
       };
       rec.start();
@@ -1379,7 +1442,7 @@
       return;
     }
     if (
-      !callMode || recognition || listening ||
+      !callMode || recognition || listening || transcriptionPending ||
       currentAudio || nativeUtterance || speechPending ||
       attachmentPicking || replyPending || voiceInputBlocked || micPaused || composerBusy() || Date.now() < aiCooldownUntil
     ) return;
@@ -1461,6 +1524,11 @@
     }
     composerEditing = false;
     $("#text").blur();
+
+    if (transcriptionPending) {
+      retryListeningButton.onclick();
+      return;
+    }
 
     const interrupted = speechPending || currentAudio || nativeUtterance || replyPending;
     if (listening && !interrupted) {
