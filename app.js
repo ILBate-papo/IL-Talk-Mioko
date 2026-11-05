@@ -268,8 +268,22 @@
     return value.replace(/\bUTC\b/gi, names[3]).replace(/\bGMT\b/gi, names[4]);
   }
 
-  function cleanSpeech(text, speechLocale = spokenLocale()) {
-    return naturalTimeSpeech(text, speechLocale)
+  function punctuationLesson(message) {
+    const topic = /aspas|ponto e v[íi]rgula|v[íi]rgula|pontua[çc][aã]o|semicolon|quotation|punctuation|punto y coma|puntuaci[oó]n|point.virgule|guillemets|ponctuation|punto e virgola|virgolette|punteggiatura|句読点|セミコロン|引用符|문장\s*부호|세미콜론|따옴표|[;“”«»"]/i;
+    const question = /como|quando|por\s*qu[eê]|porque|expl[iiq]|ensine|reda[çc][aã]o|gram[áa]tica|escrev|escrit|usar|usamos|how|when|why|explain|writing|grammar|c[oó]mo|cu[aá]ndo|por\s*qu[eé]|expli|r[eé]daction|comment|quand|pourquoi|come|quando|perch[eé]|spiega|どう|なぜ|いつ|作文|使|왜|언제|어떻게|작문|설명/i;
+    return topic.test(String(message)) && question.test(String(message));
+  }
+
+  function cleanSpeech(text, speechLocale = spokenLocale(), explainPunctuation = false) {
+    let spoken = naturalTimeSpeech(text, speechLocale);
+    if (!explainPunctuation) spoken = spoken
+      .replace(/\b(?:abre|abrir|fecha|fechar)\s+aspas\b/gi, " ")
+      .replace(/\bponto e v[íi]rgula\b/gi, ",");
+    return spoken
+      .replace(/["“”„«»]/g, "")
+      .replace(/;/g, ",")
+      .replace(/\s+([,.!?])/g, "$1")
+      .replace(/([.!?])\s*,/g, "$1")
       .replace(/^\s*(?:Leitura|Romanização|Romaji|Pronúncia(?: aproximada)?|Transcrição fonética|Fonética|IPA|Pronunciation|Phonetic(?: transcription)?)\s*:[^\n]*$/gim, " ")
       .replace(/(?:^|\s)(?:pt-BR|ja-JP|en-US|es-ES|fr-FR|ko-KR|it-IT)\s*[:=]\s*/g, " ")
       .replace(/[*#_`~]+/g, " ")
@@ -522,7 +536,7 @@
   }
   // End speech plan.
 
-  async function nativeSay(text, generation, segments = null) {
+  async function nativeSay(text, generation, segments = null, explainPunctuation = false) {
     if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance === "undefined") {
       throw Error("O navegador não oferece voz alternativa");
     }
@@ -532,7 +546,7 @@
     const parts = segments
       ? segments.map(part => {
           if (!validLocales.has(part.locale) || typeof part.text !== "string") throw Error("Idioma da fala não reconhecido.");
-          return {text: cleanSpeech(part.text, part.locale), locale: part.locale};
+          return {text: cleanSpeech(part.text, part.locale, explainPunctuation), locale: part.locale};
         }).filter(part => part.text).flatMap(part => speechSegments(part.text,
           spokenLocale() === "pt-BR" && ["ja-JP", "ko-KR"].includes(part.locale) ? "pt-BR" : part.locale))
       : speechSegments(text, spokenLocale());
@@ -709,9 +723,9 @@
     if (generation !== voiceGeneration) a.pause();
   }
 
-  async function say(value, segments = null) {
+  async function say(value, segments = null, explainPunctuation = false) {
     if (!voice) return;
-    const text = cleanSpeech(value);
+    const text = cleanSpeech(value, undefined, explainPunctuation);
     if (!text) return;
     stopListening();
     stopSpeech();
@@ -720,7 +734,7 @@
     callStatus("Preparando a voz…");
 
     try {
-      await nativeSay(text, generation, segments);
+      await nativeSay(text, generation, segments, explainPunctuation);
     } catch (e) {
       if (generation !== voiceGeneration) return;
       speechPending = false;
@@ -1010,7 +1024,7 @@
         }
         if(sourceBox.childNodes.length)answerNode.append(sourceBox);
       }
-      if (generation === voiceGeneration && requestLanguage === lang) say(String(answer), data.speech_segments || null);
+      if (generation === voiceGeneration && requestLanguage === lang) say(String(answer), data.speech_segments || null, punctuationLesson(message));
     } catch (e) {
       waiting.remove();
       if (conversation !== conversationGeneration) return;
