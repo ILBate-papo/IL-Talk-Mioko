@@ -219,8 +219,57 @@
     return d;
   }
 
-  function cleanSpeech(text) {
-    return String(text)
+  function naturalTimeSpeech(text, speechLocale) {
+    // Keep the displayed answer intact; speak time-zone references as prose.
+    const language = String(speechLocale || "pt-BR").split("-")[0];
+    const names = {
+      pt: ["horário de Brasília", "horário de Lisboa", "horário de Tóquio", "horário universal coordenado", "horário de Greenwich"],
+      ja: ["ブラジリア時間", "リスボン時間", "東京時間", "協定世界時", "グリニッジ標準時"],
+      en: ["Brasília time", "Lisbon time", "Tokyo time", "coordinated universal time", "Greenwich mean time"],
+      es: ["hora de Brasilia", "hora de Lisboa", "hora de Tokio", "tiempo universal coordinado", "hora de Greenwich"],
+      fr: ["heure de Brasilia", "heure de Lisbonne", "heure de Tokyo", "temps universel coordonné", "heure de Greenwich"],
+      ko: ["브라질리아 시간", "리스본 시간", "도쿄 시간", "협정 세계시", "그리니치 표준시"],
+      it: ["ora di Brasilia", "ora di Lisbona", "ora di Tokyo", "tempo universale coordinato", "ora di Greenwich"]
+    }[language];
+    if (!names) return String(text);
+    const offset = "(?:UTC|GMT)\\s*[+\\-−–]\\s*\\d{1,2}(?::?\\d{2})?";
+    let value = String(text).replace(/\bAmerica\/Sao_Paulo\b/g, names[0])
+      .replace(/\bEurope\/Lisbon\b/g, names[1]).replace(/\bAsia\/Tokyo\b/g, names[2]);
+    // The place name already identifies the clock. Do not read its redundant offset.
+    const places = "(?:horário de Bras[íi]lia|Bras[íi]lia time|hora de Brasilia|heure de Brasilia|ora di Brasilia|ブラジリア時間|브라질리아 시간|horário de Lisboa|Lisbon time|hora de Lisboa|heure de Lisbonne|ora di Lisbona|リスボン時間|리스본 시간|horário de Tóquio|Tokyo time|hora de Tokio|heure de Tokyo|ora di Tokyo|東京時間|도쿄 시간)";
+    value = value.replace(new RegExp("(" + places + ")\\s*\\(\\s*" + offset + "\\s*\\)", "gi"), "$1");
+    value = value.replace(new RegExp("(" + places + ")(?:\\s*[,;]\\s*|\\s+)" + offset, "gi"), "$1");
+    // An offset without a place name carries information: expand it rather than delete it.
+    value = value.replace(/\b(UTC|GMT)\s*([+\-−–])\s*(\d{1,2})(?::?(\d{2}))?\b/gi, (match, code, sign, hours, minutes) => {
+      const h = Number(hours), m = Number(minutes || 0);
+      if (h > 14 || m > 59 || (h === 14 && m)) return match;
+      const reference = /^UTC$/i.test(code) ? names[3] : names[4];
+      if (!h && !m) return reference;
+      const behind = sign !== "+";
+      const duration = {
+        pt: [h + (h === 1 ? " hora" : " horas"), m + (m === 1 ? " minuto" : " minutos"), " e "],
+        en: [h + (h === 1 ? " hour" : " hours"), m + (m === 1 ? " minute" : " minutes"), " and "],
+        es: [h + (h === 1 ? " hora" : " horas"), m + (m === 1 ? " minuto" : " minutos"), " y "],
+        fr: [h + (h === 1 ? " heure" : " heures"), m + (m === 1 ? " minute" : " minutes"), " et "],
+        it: [h + (h === 1 ? " ora" : " ore"), m + (m === 1 ? " minuto" : " minuti"), " e "],
+        ja: [h + "時間", m + "分", ""], ko: [h + "시간", m + "분", " "]
+      }[language];
+      const amount = [h ? duration[0] : "", m ? duration[1] : ""].filter(Boolean).join(duration[2]);
+      return {
+        pt: amount + (behind ? " atrás do " : " à frente do ") + reference,
+        en: amount + (behind ? " behind " : " ahead of ") + reference,
+        es: amount + (behind ? " detrás del " : " por delante del ") + reference,
+        fr: amount + (behind ? " de retard sur le " : " d’avance sur le ") + reference,
+        it: amount + (behind ? " indietro rispetto al " : " avanti rispetto al ") + reference,
+        ja: reference + "より" + amount + (behind ? "遅い時間" : "早い時間"),
+        ko: reference + "보다 " + amount + (behind ? " 느린 시간" : " 빠른 시간")
+      }[language];
+    });
+    return value.replace(/\bUTC\b/gi, names[3]).replace(/\bGMT\b/gi, names[4]);
+  }
+
+  function cleanSpeech(text, speechLocale = spokenLocale()) {
+    return naturalTimeSpeech(text, speechLocale)
       .replace(/^\s*(?:Leitura|Romanização|Romaji|Pronúncia(?: aproximada)?|Transcrição fonética|Fonética|IPA|Pronunciation|Phonetic(?: transcription)?)\s*:[^\n]*$/gim, " ")
       .replace(/(?:^|\s)(?:pt-BR|ja-JP|en-US|es-ES|fr-FR|ko-KR|it-IT)\s*[:=]\s*/g, " ")
       .replace(/[*#_`~]+/g, " ")
@@ -483,7 +532,7 @@
     const parts = segments
       ? segments.map(part => {
           if (!validLocales.has(part.locale) || typeof part.text !== "string") throw Error("Idioma da fala não reconhecido.");
-          return {text: cleanSpeech(part.text), locale: part.locale};
+          return {text: cleanSpeech(part.text, part.locale), locale: part.locale};
         }).filter(part => part.text).flatMap(part => speechSegments(part.text,
           spokenLocale() === "pt-BR" && ["ja-JP", "ko-KR"].includes(part.locale) ? "pt-BR" : part.locale))
       : speechSegments(text, spokenLocale());
