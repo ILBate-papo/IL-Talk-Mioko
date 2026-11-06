@@ -12,7 +12,7 @@
 // Load access controls before allowing any course entry.
 {
   const authScript = document.createElement("script");
-  authScript.src = "auth.js?v=20261016-cadastro1";
+  authScript.src = "auth.js?v=20261106-sessao1";
   document.head.appendChild(authScript);
   const authStyle = document.createElement("link");
   authStyle.rel = "stylesheet";
@@ -787,15 +787,20 @@
   };
   $("#voice").insertAdjacentElement("afterend", testVoiceButton);
 
-  $("#enter").onclick = async () => {
-    if (!await window.MiokoAuth?.signIn()) return;
+  function openAuthenticatedCourse() {
+    if (!window.MiokoAuth?.hasAccess()) return;
     loadUserHistory();
     lessonLevel = readCourseLevel();
     updateLessonMode();
     $("#login").classList.add("hide");
     $("#app").classList.remove("hide");
-    prepareAudio();
     window.MiokoPortal?.open("aula");
+  }
+  window.addEventListener("mioko-session-restored", openAuthenticatedCourse);
+  $("#enter").onclick = async () => {
+    if (!await window.MiokoAuth?.signIn()) return;
+    openAuthenticatedCourse();
+    prepareAudio();
   };
 
   $("#exitCourse").onclick = () => {
@@ -809,6 +814,10 @@
     $("#pass").value = "";
     scrollTo(0, 0);
   };
+  window.addEventListener("mioko-session-ended", () => {
+    stopMedia();window.MiokoPortal?.reset();history=[];historyKey="";
+    $("#chat").replaceChildren();$("#app").classList.add("hide");$("#login").classList.remove("hide");
+  });
 
   document.querySelectorAll("[data-mode]").forEach(b => {
     b.onclick = () => {

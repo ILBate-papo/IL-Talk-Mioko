@@ -3,8 +3,12 @@
   const base='https://'+c.SUPABASE_PROJECT_REF+'.supabase.co';
   const key=c.SUPABASE_PUBLISHABLE_KEY || c.SUPABASE_ANON_KEY;
   const store='mioko_auth_session_v1';
-  let session=null, access=null, refreshPromise=null, accessChecked=0;
-  try {session=JSON.parse(sessionStorage.getItem(store)||'null');} catch {}
+  let session=null, access=null, refreshPromise=null, restorePromise=null, accessChecked=0, generation=0;
+  function storedSession(){try{return JSON.parse(localStorage.getItem(store)||'null');}catch{return null;}}
+  session=storedSession();
+  // Migrate the existing tab without asking an already signed-in user to log in again.
+  if(!session){try{session=JSON.parse(sessionStorage.getItem(store)||'null');if(session)localStorage.setItem(store,JSON.stringify(session));}catch{}}
+  try{sessionStorage.removeItem(store);}catch{}
   const status=document.createElement('p');status.id='authStatus';status.setAttribute('role','status');status.setAttribute('aria-live','polite');
   const enter=document.querySelector('#enter');
   enter.after(status);
@@ -31,7 +35,7 @@
   document.querySelector('#email').setAttribute('aria-label','E-mail');
   document.querySelector('#pass').autocomplete='current-password';
   document.querySelector('#pass').setAttribute('aria-label','Senha');
-  const save=()=>{if(session)sessionStorage.setItem(store,JSON.stringify(session));else sessionStorage.removeItem(store);};
+  const save=()=>{try{if(session)localStorage.setItem(store,JSON.stringify(session));else localStorage.removeItem(store);sessionStorage.removeItem(store);}catch{tell('Seu dispositivo não permitiu salvar a sessão.');}};
   const tell=text=>{status.textContent=text;};
   async function request(path,body,token) {
     const r=await fetch(base+path,{method:'POST',headers:{apikey:key,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(body),signal:AbortSignal.timeout(20000)});
@@ -42,14 +46,30 @@
   async function token() {
     if(!session?.access_token)throw Error('Entre com seu e-mail e senha.');
     if((session.expires_at||0)*1000<Date.now()+60000){
-      if(!refreshPromise)refreshPromise=request('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token}).then(d=>{session={...d,expires_at:Math.floor(Date.now()/1000)+d.expires_in};save();}).finally(()=>{refreshPromise=null;});
+      if(!refreshPromise){
+        const currentGeneration=generation;
+        const refresh=async()=>{
+          if(currentGeneration!==generation)throw Error('Sessão encerrada.');
+          session=storedSession()||session;
+          if((session.expires_at||0)*1000>=Date.now()+60000)return;
+          const d=await request('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token});
+          if(currentGeneration!==generation)throw Error('Sessão encerrada.');
+          session={...d,expires_at:Math.floor(Date.now()/1000)+d.expires_in};save();
+        };
+        const pending=(navigator.locks?.request?navigator.locks.request(store,refresh):refresh()).finally(()=>{if(refreshPromise===pending)refreshPromise=null;});
+        refreshPromise=pending;
+      }
       await refreshPromise;
     }
+    if(!session?.access_token)throw Error('Sessão encerrada.');
     return session.access_token;
   }
   async function verify() {
+    const currentGeneration=generation;
     const t=await token();
-    access=await request('/functions/v1/il-access',{},t);
+    const checked=await request('/functions/v1/il-access',{},t);
+    if(currentGeneration!==generation)throw Error('Sessão encerrada.');
+    access=checked;
     if(!access.allowed)throw Error(access.reason||'Acesso não liberado.');
     accessChecked=Date.now();
     window.dispatchEvent(new CustomEvent('mioko-auth',{detail:{role:access.role}}));
@@ -60,9 +80,11 @@
     const email=document.querySelector('#email').value.trim().toLowerCase();
     const password=document.querySelector('#pass').value;
     if(!email||!password){tell('Informe seu e-mail e senha.');return false;}
+    generation++;const currentGeneration=generation;
     session=null;save();access=null;accessChecked=0;enter.disabled=true;tell('Conferindo seu acesso…');
     try {
       const d=await request('/auth/v1/token?grant_type=password',{email,password});
+      if(currentGeneration!==generation)return false;
       session={...d,expires_at:Math.floor(Date.now()/1000)+d.expires_in};save();
       await verify();document.querySelector('#pass').value='';tell('');return true;
     } catch(e){tell(e.message==='Invalid login credentials'?'E-mail ou senha incorretos.':e.message);return false;}
@@ -82,12 +104,42 @@
     finally{create.disabled=false;}
   };
   async function signOut() {
-    const old=session;session=null;access=null;accessChecked=0;save();
+    generation++;const old=session;session=null;access=null;accessChecked=0;save();
+    resume.hidden=true;
     if(old?.access_token)fetch(base+'/auth/v1/logout',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+old.access_token},signal:AbortSignal.timeout(10000)}).catch(()=>{});
     tell('Sessão encerrada.');
   }
-  window.MiokoAuth={signIn,signOut,getToken:token,userId:()=>access?.user_id || "",hasAccess:()=>!!access?.allowed,role:()=>access?.role||'',requireAccess:async()=>{if(!access?.allowed||Date.now()-accessChecked>60000)await verify();return token();}};
-  // Always show the login screen; a stored session alone never opens the course.
+  const resume=document.createElement('button');resume.type='button';resume.className='nb';resume.textContent='Continuar sessão';resume.hidden=true;status.after(resume);
+  async function restoreSession(){
+    if(restorePromise)return restorePromise;
+    if(!session?.access_token)return false;
+    const currentGeneration=generation;
+    restorePromise=(async()=>{
+      resume.hidden=true;tell('Retomando sua sessão…');
+      try{
+        await verify();
+        if(currentGeneration!==generation)return false;
+        tell('');window.dispatchEvent(new CustomEvent('mioko-session-restored'));return true;
+      }catch(e){
+        if(currentGeneration===generation){tell('Não foi possível retomar agora. '+e.message);resume.hidden=!session;}
+        return false;
+      }finally{restorePromise=null;}
+    })();
+    return restorePromise;
+  }
+  resume.onclick=()=>restoreSession();
+  window.MiokoAuth={signIn,signOut,restoreSession,getToken:token,userId:()=>access?.user_id || "",hasAccess:()=>!!access?.allowed,role:()=>access?.role||'',requireAccess:async()=>{if(!access?.allowed||Date.now()-accessChecked>60000)await verify();return token();}};
+  window.addEventListener('storage',e=>{
+    if(e.key!==store)return;
+    session=storedSession();
+    if(!session){generation++;access=null;accessChecked=0;resume.hidden=true;window.dispatchEvent(new CustomEvent('mioko-session-ended'));}
+  });
+  const resumeOnReturn=()=>{if(session&&!access?.allowed)restoreSession();else if(session)token().catch(()=>{tell('Conexão interrompida. Sua sessão foi mantida; tente novamente.');});};
+  window.addEventListener('pageshow',resumeOnReturn);
+  window.addEventListener('online',resumeOnReturn);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)resumeOnReturn();});
+  // A saved token opens the course only after the server verifies the account's access.
   document.querySelector('#app').classList.add('hide');document.querySelector('#login').classList.remove('hide');
+  if(session)restoreSession();
 })();
 
