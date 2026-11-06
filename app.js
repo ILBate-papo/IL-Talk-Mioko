@@ -50,11 +50,19 @@
   }
 
   let lang = localStorage.ilLang || "Português";
+  if (["Italiano", "Outro"].includes(lang)) {
+    lang = "Conversa livre";
+    localStorage.ilLang = lang;
+  }
+  const freeConversation = () => lang === "Conversa livre";
+  const conversationMode = () => freeConversation() ? "free" : lang === "Português" ? "portuguese_lesson" : "language_lesson";
+  const courseRequestLanguage = () => freeConversation() ? "Português" : lang;
   const locales = { Português: "pt-BR", Japonês: "ja-JP", Inglês: "en-US", Espanhol: "es-ES", Francês: "fr-FR", Coreano: "ko-KR", Italiano: "it-IT" };
   const locale = () => locales[lang] || "pt-BR";
   const legacyAdvancedLanguage = localStorage.ilBeginnerSupport === "off" ? lang : null;
   const levelStorageKey = () => "ilMiokoCourseLevels:" + (window.MiokoAuth?.userId() || "guest");
   function readCourseLevel() {
+    if (freeConversation()) return "advanced";
     try {
       const saved = JSON.parse(localStorage.getItem(levelStorageKey()) || "{}")[lang];
       if (["beginner", "intermediate", "advanced"].includes(saved)) return saved;
@@ -69,7 +77,8 @@
     ? "Olá! Vamos aprender " + lang.toLowerCase() + ". Vou conversar em português e explicar as frases que você pedir. O que gostaria de aprender?"
     : (greetings[lang] || greetings.Português);
   const greetings = {
-    Português: "Olá! Sou a Mioko. O que você gostaria de conversar?",
+    Português: "Olá! Vamos estudar português. Você quer praticar leitura, gramática, escrita ou redação?",
+    "Conversa livre": "Olá! Sou a Mioko. Sobre o que você gostaria de conversar?",
     Japonês: "こんにちは、ミオコです。何について話しましょうか？",
     Inglês: "Hello! I'm Mioko. What would you like to talk about?",
     Espanhol: "¡Hola! Soy Mioko. ¿De qué te gustaría hablar?",
@@ -681,7 +690,7 @@
         method: "POST",
         headers: await headers(),
         signal: controller.signal,
-        body: JSON.stringify({ text, language: lang })
+        body: JSON.stringify({ text, language: courseRequestLanguage() })
       });
       if (!r.ok) {
         const detail = await r.text();
@@ -810,16 +819,11 @@
 
   window.addEventListener("mioko-leave-lesson", () => stopMedia());
 
-  // Italian replaces the former generic language option.
-  const otherLanguage = document.querySelector('[data-lang="Outro"]');
-  if (otherLanguage) {
-    otherLanguage.dataset.lang = "Italiano";
-    otherLanguage.textContent = "🇮🇹 Italiano";
-  }
-  if (lang === "Outro") {
-    lang = "Italiano";
-    localStorage.ilLang = lang;
-  }
+  // Also migrate an older cached page to the replacement conversation button.
+  document.querySelectorAll('[data-lang="Outro"], [data-lang="Italiano"]').forEach(button => {
+    button.dataset.lang = "Conversa livre";
+    button.textContent = "💬 Conversa livre";
+  });
 
   const levelBox = document.createElement("label");
   levelBox.style.cssText = "display:block;margin:10px 0;font-size:14px";
@@ -827,7 +831,7 @@
   const levelSelect = document.createElement("select");
   levelSelect.setAttribute("aria-label", "Seu nível no idioma");
   levelSelect.style.cssText = "padding:9px;border-radius:8px;background:#111b2b;color:#fff;border:1px solid #6684a6;max-width:100%";
-  for (const [value, label] of [["beginner", "Iniciante — apoio em português"], ["intermediate", "Intermediário — prática com apoio"], ["advanced", "Avançado — conversar no idioma"]]) {
+  for (const [value, label] of [["beginner", "Iniciante"], ["intermediate", "Intermediário"], ["advanced", "Avançado"]]) {
     const option = document.createElement("option");
     option.value = value; option.textContent = label; levelSelect.append(option);
   }
@@ -835,8 +839,17 @@
   $("#status").insertAdjacentElement("afterend", levelBox);
   const updateLessonMode = () => {
     levelSelect.value = lessonLevel;
+    levelBox.hidden = freeConversation();
+    levelBox.style.display = freeConversation() ? "none" : "block";
+    document.querySelectorAll('[data-lesson-only]').forEach(button => { button.hidden = freeConversation(); });
+    $("#begin").textContent = freeConversation() ? "💬 INICIAR CONVERSA" : lang === "Português" ? "📚 COMEÇAR AULA DE PORTUGUÊS" : "✨ COMEÇAR AULA";
+    if (freeConversation()) {
+      $("#status").textContent = "Conversa livre • português • assuntos variados";
+      $("#level").textContent = "conversa livre";
+      return;
+    }
     const labels = {beginner:"iniciante", intermediate:"intermediário", advanced:"avançado"};
-    $("#status").textContent = lang + " • " + labels[lessonLevel] + (beginnerLesson() ? " • apoio em português" : " • conversação em " + lang.toLowerCase());
+    $("#status").textContent = lang + " • " + labels[lessonLevel] + (lang === "Português" ? " • aula de português" : beginnerLesson() ? " • apoio em português" : " • conversação em " + lang.toLowerCase());
     $("#level").textContent = labels[lessonLevel];
   };
   levelSelect.onchange = () => {
@@ -996,8 +1009,9 @@
       add("ai", "Falta configurar a função il-ai em config.js.");
       return;
     }
-    const waiting = add("ai", "🧠 Pensando...");
-    callStatus("Preparando sua resposta…");
+    const currentLookup = researchMode || /vagas?|empregos?|ofertas? de trabalho|not[ií]cias?|atualidades?|acontecimentos?|hoje|previs[aã]o|temperatura|latest|news|jobs?|hiring/i.test(message);
+    const waiting = add("ai", currentLookup ? "🔎 Pesquisando fontes recentes…" : "🧠 Pensando...");
+    callStatus(currentLookup ? "Pesquisando fontes recentes…" : "Preparando sua resposta…");
     const controller = new AbortController();
     replyController = controller;
     cancelReplyButton.hidden = false;
@@ -1015,14 +1029,15 @@
         signal: controller.signal,
         body: JSON.stringify({
           message,
-          teaching_mode: beginnerLesson() ? "foreign_beginner_pt" : lessonLevel === "intermediate" ? "foreign_intermediate" : "conversation",
+          conversation_mode: conversationMode(),
+          teaching_mode: lang === "Português" ? "portuguese_lesson" : beginnerLesson() ? "foreign_beginner_pt" : lessonLevel === "intermediate" && !freeConversation() ? "foreign_intermediate" : "conversation",
           learner_level: lessonLevel,
           research_current: researchMode,
           exam_mode: examMode,
           voice_conversation: !!callMode,
           humorous_conversation: true,
           client_datetime: new Date().toLocaleString("pt-BR", {timeZoneName:"short"}) + " (" + Intl.DateTimeFormat().resolvedOptions().timeZone + ")",
-          language: lang,
+          language: courseRequestLanguage(),
           history: history.slice(0, -1).slice(-10).map(x => ({role: x.role, content: String(x.content).slice(0,2000)}))
         })
         });
@@ -1043,6 +1058,7 @@
       if (!answer) throw Error("A função respondeu sem texto");
       waiting.remove();
       const answerNode=add("ai", String(answer), true);
+      callStatus("Resposta pronta.");
       if (Array.isArray(data.sources)) {
         const sourceBox=document.createElement("div");sourceBox.style.cssText="font-size:12px;margin-top:8px";
         for(const value of data.sources.slice(0,8)) {
@@ -1050,7 +1066,15 @@
             const link=document.createElement("a");link.href=u.href;link.target="_blank";link.rel="noopener noreferrer";link.textContent=u.hostname;link.style.cssText="display:block;color:#9fe9d5";sourceBox.append(link);
           }catch{}
         }
-        if(sourceBox.childNodes.length)answerNode.append(sourceBox);
+        if(sourceBox.childNodes.length) {
+          const checked = new Date(data.researched_at);
+          if (data.researched_at && Number.isFinite(checked.getTime())) {
+            const note = document.createElement("small");
+            note.textContent = (data.research_status === "headlines" ? "Manchetes consultadas em " : "Fontes consultadas em ") + checked.toLocaleString(locale(), {dateStyle:"short",timeStyle:"short"});
+            sourceBox.append(note);
+          }
+          answerNode.append(sourceBox);
+        }
       }
       if (generation === voiceGeneration && requestLanguage === lang) say(String(answer), data.speech_segments || null, punctuationLesson(message));
     } catch (e) {

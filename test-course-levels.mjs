@@ -6,7 +6,7 @@ const start=source.indexOf('  const legacyAdvancedLanguage');
 const end=source.indexOf('  let voice =',start);
 const levels={}, storage={};
 const locales={Português:'pt-BR',Japonês:'ja-JP',Inglês:'en-US',Espanhol:'es-ES',Francês:'fr-FR',Coreano:'ko-KR',Italiano:'it-IT'};
-const c=vm.createContext({lang:'Japonês',locales,locale:()=>locales[c.lang],window:{MiokoAuth:{userId:()=> 'learner'}},localStorage:{getItem:key=>storage[key]||null}});
+const c=vm.createContext({lang:'Japonês',locales,freeConversation:()=>c.lang==='Conversa livre',locale:()=>locales[c.lang],window:{MiokoAuth:{userId:()=> 'learner'}},localStorage:{getItem:key=>storage[key]||null}});
 vm.runInContext(source.slice(start,end),c);
 for(const language of Object.keys(locales)){
  c.lang=language;

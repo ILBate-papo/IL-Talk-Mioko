@@ -12,7 +12,7 @@
   const student = node('section', undefined, 'portal'); student.id = 'studentPage'; student.hidden = true;
   const teacher = node('section', undefined, 'portal'); teacher.id = 'teacherPage'; teacher.hidden = true;
   main.append(student, teacher, lesson);
-  const languages = ['Português', 'Japonês', 'Inglês', 'Espanhol', 'Francês', 'Coreano', 'Italiano'];
+  const languages = ['Português', 'Japonês', 'Inglês', 'Espanhol', 'Francês', 'Coreano'];
   const levels = {beginner:'Iniciante', intermediate:'Intermediário', advanced:'Avançado'};
   let current = 'aula';
   const user = () => window.MiokoAuth?.userId?.();
@@ -51,9 +51,10 @@
     try { history = JSON.parse(localStorage.getItem('ilMiokoHistory:' + user()) || '[]'); if (!Array.isArray(history)) history = []; } catch {}
     try { course = JSON.parse(localStorage.getItem('ilMiokoCourseLevels:' + user()) || '{}') || {}; } catch {}
     const language = localStorage.ilLang || 'Português';
-    summary(student, ['Idioma atual: ' + language, 'Nível: ' + (levels[course[language]] || 'Iniciante'), history.length + ' mensagens guardadas']);
+    const free = ['Conversa livre', 'Italiano', 'Outro'].includes(language);
+    summary(student, [free ? 'Modo: Conversa livre' : 'Idioma atual: ' + language, free ? 'Conversa sem nível de aula' : 'Nível: ' + (levels[course[language]] || 'Iniciante'), history.length + ' mensagens guardadas']);
     const tools = node('div', undefined, 'tools');
-    tools.append(button('📚 Continuar minha aula', () => goToLesson()), button('🗣️ Praticar conversação', () => goToLesson('Quero praticar conversação em ' + language + '. Respeite meu nível e faça uma pergunta de cada vez.')));
+    tools.append(button(free ? '💬 Continuar minha conversa' : '📚 Continuar minha aula', () => goToLesson()), button(free ? '💬 Escolher um assunto' : '🗣️ Praticar conversação', () => goToLesson(free ? 'Quero conversar sobre um assunto do dia a dia. Faça uma pergunta para começarmos.' : 'Quero praticar conversação em ' + language + '. Respeite meu nível e faça uma pergunta de cada vez.')));
     const studies = node('a', '📖 Materiais e estudos', 'nb'); studies.href = 'estudos.html'; tools.append(studies); student.append(tools);
     const grid = node('div', undefined, 'portalGrid'); grid.style.marginTop = '22px';
     const goals = node('section', undefined, 'panel'); goals.append(node('h2', 'Meu plano de estudo'));
@@ -83,7 +84,7 @@
     const status = statusNode(), actions = node('div', undefined, 'tools');
     const plans = () => { const value = read('plans', []); return Array.isArray(value) ? value : []; };
     const clear = () => { editing = null; title.value = activity.value = ''; language.value = 'Português'; level.value = 'beginner'; };
-    const valid = () => { if (!title.value.trim() || !activity.value.trim()) { status.textContent = 'Preencha o tema e as atividades da aula.'; return false; } return true; };
+    const valid = () => { if (!languages.includes(language.value)) { status.textContent = 'Escolha um dos idiomas disponíveis para esta aula.'; return false; } if (!title.value.trim() || !activity.value.trim()) { status.textContent = 'Preencha o tema e as atividades da aula.'; return false; } return true; };
     actions.append(button('Salvar plano', () => {
       if (!valid()) return;
       const all = plans(); const plan = {id:editing || crypto.randomUUID(), title:title.value.trim(), language:language.value, level:level.value, activity:activity.value.trim()};

@@ -20,6 +20,7 @@ function harness({auth,fetcher}={}) {
     add(type,text,save){const node={type,text,removed:false,remove(){this.removed=true;}};messages.push(node);if(save)c.history.push({role:type==='ai'?'assistant':'user',content:text});return node;},
     callStatus:text=>{c.notice=text;},endpoint:()=> 'https://test.invalid/il-ai',
     config:()=>({SUPABASE_PUBLISHABLE_KEY:'publishable-test'}),beginnerLesson:()=>false,
+    conversationMode:()=>c.lang==='Conversa livre'?'free':c.lang==='Português'?'portuguese_lesson':'language_lesson',freeConversation:()=>c.lang==='Conversa livre',courseRequestLanguage:()=>c.lang==='Conversa livre'?'Português':c.lang,
     showCooldown:seconds=>{c.aiCooldownUntil=Date.now()+seconds*1000;},
     fetch:async(url,options)=>{requests.push(options);return fetcher?fetcher(options):{ok:true,text:async()=>JSON.stringify({answer:'Resposta pronta',speech_segments:[]})};},
     setTimeout(fn){timers.set(++timer,fn);return timer;},clearTimeout:id=>timers.delete(id),
@@ -57,6 +58,9 @@ assert(b.messages.filter(x=>x.text==='🧠 Pensando...').every(x=>x.removed));
 
 // Two clicks before the queue starts still reserve just one request.
 const d=harness();const once=d.send('Um');assert.equal(d.send('Dois'),undefined);await once;assert.equal(d.requests.length,1);
+const free=harness();free.c.lang='Conversa livre';await free.send('Vamos conversar');
+const freeBody=JSON.parse(free.requests[0].body);assert.equal(freeBody.language,'Português');assert.equal(freeBody.conversation_mode,'free');assert.equal(freeBody.teaching_mode,'conversation');
+assert.equal(JSON.parse(d.requests[0].body).conversation_mode,'portuguese_lesson');
 const missing=harness({auth:async()=>null});await missing.send('Olá');assert.equal(missing.requests.length,0);assert.equal(missing.c.replyPending,false);
 const limited=harness({fetcher:async()=>({ok:false,status:429,text:async()=>JSON.stringify({error:'rate limit',retry_after:10})})});
 await limited.send('Olá');assert(limited.c.aiCooldownUntil>Date.now());assert.equal(limited.c.replyPending,false);assert.equal(limited.requests.length,1);
