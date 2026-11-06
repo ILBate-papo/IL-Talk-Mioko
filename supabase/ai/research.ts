@@ -9,6 +9,8 @@ export function needsResearch(message, requested = false) {
   // Employment and local services are time-sensitive, even without "today".
   if(/vagas?|empregos?|ofertas? de trabalho|procur(?:o|ar|ando).{0,20}trabalho|contratando|recrutamento|job openings?|job vacancies|hiring|emploi|offres? d.emploi|stellenangebote|求人|채용/i.test(message))return true;
   // Current officeholders, prices and releases need verification even without "today".
+  if(/cidad[aã]os?|naturaliza|naturalis|nacionalidad|ciudadan|nationalit|귀화|帰化|continente.{0,45}(?:rico|desenvolvid)|primeiro mundo|first.world|\bPIB\b|\bGDP\b|renda per capita/i.test(message))return true;
+  if(/sobrenom|apelido|surname|last name|nom de famille|cognome|apellido|성씨|姓氏/i.test(message) && /origem|origin|onde.{0,15}v[eê]m|pa[ií]s|country|proven|ét[iy]m|etimolog/i.test(message))return true;
   if(/quem.{0,35}(?:presidente|primeir[oa].ministr[oa]|governador|prefeit[oa]|chanceler|CEO)|(?:presidente|primeir[oa].ministr[oa]|governador|prefeit[oa]|CEO).{0,25}atual|who.{0,25}(?:president|prime minister|CEO)|chi.{0,20}(?:presidente|primo ministro)|qui.{0,20}(?:président|premier ministre)|presidente actual|大統領|首相|대통령|총리|pre[çc]o|cota[çc][aã]o|c[aâ]mbio|taxa de juros|infla[çc][aã]o|lan[çc]amento|vers[aã]o (?:mais )?(?:nova|recente|atual)|price|exchange rate|inflation|prezzo|tasso di cambio|prix actuel/i.test(message))return true;
   return /(?:posso|devo).{0,35}(?:comer|beber|tomar)|o que.{0,20}(?:comer|beber)|hipotens|press[aã]o (?:alta|baixa|arterial)|emagrec|perd(?:er|a de) peso|alimentos?|card[aá]pio|cabel|queda de fios|biotina|suplement|pot[aá]ssio|colesterol|weight loss|hair loss|blood pressure|perdere peso|capelli|pressione (?:alta|bassa)|cabello|cheveux|pression art[eé]rielle|脱毛|血圧|혈압|탈모|sa[uú]de|primeiros socorros|sintoma|tratamento|medicamento|rem[eé]dio|vacina|doen[çc]a|alergia|alimenta[çc][aã]o|nutri[çc][aã]o|dieta|diabetes|hipertens|dor no|febre|first aid|health|treatment|nutrition|salute|salud|sant[eé]|健康|응급|건강|membro.{0,15}associad|livre (?:acesso|circula[çc][aã]o)|\bporte\b|posse.{0,15}arma|\barmas?\b|firearm|gun law|licen[çc]a|legisla[çc][aã]o|lei vigente|pol[ií]tica|pesquisa.{0,25}(?:voto|eleitoral)|quem.{0,20}(?:ganh|frente|lider)|inten[çc][aã]o de voto|canad[aá]|passaporte|nacionalit[aà]|cittadinanza|citoyennet[eé]|citizenship|国籍|시민권|\b20(?:2[6-9]|[3-9][0-9])\b|guerra|conflit|cessar.fogo|bombarde|invas[aã]o|acontecid|do dia|mundo.{0,20}(?:agora|recent)|\bwar\b|ceasefire|notizie|attualit[aà]|guerre|戦争|停戦|전쟁|휴전|elei[çc](?:[aã]o|[oõ]es)|edital|concurso|\bOAB\b|\bOA\b|calend[aá]rio|inscri[çc][aã]o|not[ií]cia|atualidade|aconteciment|temperatura|previs[aã]o|clima|como est[aá] o tempo|tempo em |vai chover|placar|rodada|classifica[çc][aã]o|resultado.{0,30}(jogo|partida)|weather|temperature|天気|気温|météo|날씨|atualizad|hoje|[uú]ltim[oa]|sal[aá]rio|custo de vida|nacionalidade|cidadania|imigra[çc][aã]o|visto|direito de portugal|uni[aã]o europeia|current|latest|news|salary|cost of living|citizenship|immigration|今日|最新|ニュース|給料|生活費|国籍|noticias|salario|costo de vida|stipendio|costo della vita|actualité|salaire|생활비|시민권/i.test(message);
 }
@@ -16,11 +18,12 @@ export function needsResearch(message, requested = false) {
 export function prepareResearchQuestion(message, history = []) {
   const text=String(message);
   // Use only a relevant place name from context, never copy personal history into search.
-  if(/bragan[çc]a/i.test(text) && !/portugal|brasil|brazil|par[aá]|\bPA\b/i.test(text)){
+  if(/bragan[çc]a/i.test(text) && !/portugal|brasil|brazil|paulista|par[aá]|\bPA\b/i.test(text)){
     const recent=history.slice(-6).map(item=>String(item?.content||'')).reverse();
     for(const previous of recent){
+      if(/bragan[çc]a paulista/i.test(previous))return text+' Local desta pergunta: Bragança Paulista, São Paulo, Brasil.';
       if(/bragan[çc]a.{0,30}portugal|portugal.{0,30}bragan[çc]a/i.test(previous))return text+' Local desta pergunta: Bragança, Portugal.';
-      if(/bragan[çc]a.{0,30}(?:brasil|par[aá])|(?:brasil|par[aá]).{0,30}bragan[çc]a/i.test(previous))return text+' Local desta pergunta: Bragança, Pará, Brasil.';
+      if(/bragan[çc]a.{0,30}par[aá]|par[aá].{0,30}bragan[çc]a/i.test(previous))return text+' Local desta pergunta: Bragança, Pará, Brasil.';
     }
   }
   return text;

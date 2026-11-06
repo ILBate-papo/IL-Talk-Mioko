@@ -10,6 +10,9 @@ assert.equal(prepareResearchQuestion('Tem emprego em Bragança?',history),'Tem e
 assert(!prepareResearchQuestion('Tem emprego em Bragança?',history).includes('telefone'));
 assert.equal(prepareResearchQuestion('Tem emprego em Bragança, Pará?',history),'Tem emprego em Bragança, Pará?');
 assert.equal(prepareResearchQuestion('Tem emprego em Bragança PA?',history),'Tem emprego em Bragança PA?');
+assert.equal(prepareResearchQuestion('Tem emprego em Bragança Paulista?',history),'Tem emprego em Bragança Paulista?');
+assert(prepareResearchQuestion('Tem emprego em Bragança?',[{content:'Moro em Bragança Paulista, Brasil.'}]).includes('Bragança Paulista, São Paulo, Brasil.'));
+assert.equal(prepareResearchQuestion('Tem emprego em Bragança?',[{content:'Bragança no Brasil'}]),'Tem emprego em Bragança?','Brazil alone does not identify which Bragança');
 assert.equal(prepareResearchQuestion('Tem emprego em Bragança?',[]),'Tem emprego em Bragança?');
 
 const now=Date.now(),date=new Date(now-3600000).toUTCString();

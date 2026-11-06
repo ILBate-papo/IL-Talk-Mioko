@@ -3,6 +3,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {modeInstructions} from './supabase/ai/conversation-modes.ts';
 import {speechStyle} from './supabase/ai/speech-style.ts';
+import {topicInstructions} from './supabase/ai/knowledge-topics.ts';
 const app=readFileSync('app.js','utf8');
 const piece=(a,b)=>app.slice(app.indexOf(a),app.indexOf(b,app.indexOf(a)));
 function boot(language){
@@ -33,7 +34,7 @@ vm.runInNewContext(source,{
  Deno:{env:{get:k=>k==='GROQ_API_KEY'?'test-key':undefined}},serveWithOrigins:fn=>handler=fn,
  checkAccess:async()=>({allowed,status:403,reason:'Sem acesso',role:'member'}),
  everydayPhrase:()=>null,subjectInstructions:()=>'',examInstructions:()=>'',profileInstructions:()=>'',needsResearch:()=>false,
- researchCurrent:async()=>null,prepareResearchQuestion:m=>m,speechStyle,modeInstructions,
+ researchCurrent:async()=>null,prepareResearchQuestion:m=>m,speechStyle,modeInstructions,topicInstructions,
  crypto:{randomUUID:()=> 'test'},Response,AbortSignal,console:{info(){},warn(){},error(){}},
  fetch:async(_url,options)=>{calls++;prompt=JSON.parse(options.body).messages[0].content;return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({segments:[{locale:'pt-BR',text:'Resposta de teste.'}]})}}]});}
 });
