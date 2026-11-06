@@ -1,7 +1,7 @@
 (() => {
-  const build = '20261016-arquivos4';
+  const build = '20261106-sessao1';
   const label = document.createElement('small');
-  label.textContent = 'PDFs e fotos · revisão 16/10–4';
+  label.textContent = 'Sessão mantida · Conversa livre · revisão 06/11';
   label.style.cssText = 'display:block;text-align:center;color:#bdcde2;margin:8px';
   const button = document.createElement('button');
   button.type = 'button'; button.className = 'nb'; button.textContent = '↻ Atualizar Mioko';
