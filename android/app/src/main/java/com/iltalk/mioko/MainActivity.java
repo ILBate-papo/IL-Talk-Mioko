@@ -29,7 +29,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class MainActivity extends Activity {
-    private static final String HOME = "https://ilbate-papo.github.io/IL-Talk-Mioko/";
+    private static final String HOME = "https://mioko.il-talk.com.br/";
+    private static final java.util.Set<String> TRUSTED_ORIGINS = Collections.unmodifiableSet(
+        new java.util.HashSet<>(java.util.Arrays.asList("https://mioko.il-talk.com.br", "https://ilbate-papo.github.io")));
     private WebView web;
     private TextToSpeech tts;
     private boolean ttsReady;
@@ -42,9 +44,13 @@ public class MainActivity extends Activity {
     private final android.os.Handler microphoneHandler = new android.os.Handler(android.os.Looper.getMainLooper());
     private Runnable microphoneMeter;
 
+    private boolean trustedOrigin(Uri uri) {
+        return uri != null && "https".equals(uri.getScheme()) && (uri.getPort() == -1 || uri.getPort() == 443)
+            && ("mioko.il-talk.com.br".equals(uri.getHost()) || "ilbate-papo.github.io".equals(uri.getHost()));
+    }
     private boolean trusted(Uri uri) {
-        return uri != null && "https".equals(uri.getScheme()) && "ilbate-papo.github.io".equals(uri.getHost())
-            && (uri.getPort() == -1 || uri.getPort() == 443) && uri.getPath() != null && uri.getPath().startsWith("/IL-Talk-Mioko/");
+        return trustedOrigin(uri) && ("mioko.il-talk.com.br".equals(uri.getHost())
+            || (uri.getPath() != null && uri.getPath().startsWith("/IL-Talk-Mioko/")));
     }
     private boolean trustedPage() { return web != null && web.getUrl() != null && trusted(Uri.parse(web.getUrl())); }
 
@@ -83,12 +89,12 @@ public class MainActivity extends Activity {
         catch (Exception ignored) { }
         boolean bridgeSupported = WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER);
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-            WebViewCompat.addWebMessageListener(web, "MiokoVoiceBridge", Collections.singleton("https://ilbate-papo.github.io"), (view, message, origin, mainFrame, reply) -> {
-                if (!mainFrame || !trustedPage() || !"https".equals(origin.getScheme()) || !"ilbate-papo.github.io".equals(origin.getHost())) return;
+            WebViewCompat.addWebMessageListener(web, "MiokoVoiceBridge", TRUSTED_ORIGINS, (view, message, origin, mainFrame, reply) -> {
+                if (!mainFrame || !trustedPage() || !trustedOrigin(origin)) return;
                 try { handleVoice(new JSONObject(message.getData())); } catch (Exception ignored) { }
             });
             if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                WebViewCompat.addDocumentStartJavaScript(web, voiceScript, Collections.singleton("https://ilbate-papo.github.io"));
+                WebViewCompat.addDocumentStartJavaScript(web, voiceScript, TRUSTED_ORIGINS);
             }
         }
         web.setWebViewClient(new WebViewClient() {
@@ -142,7 +148,7 @@ public class MainActivity extends Activity {
         try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) { }
     }
     private void askMediaPermission(PermissionRequest request) {
-        if (!trustedPage() || !"https".equals(request.getOrigin().getScheme()) || !"ilbate-papo.github.io".equals(request.getOrigin().getHost())) { request.deny(); return; }
+        if (!trustedPage() || !trustedOrigin(request.getOrigin())) { request.deny(); return; }
         if (pendingPermission != null) { request.deny(); return; }
         ArrayList<String> needed = new ArrayList<>();
         for (String resource : request.getResources()) {

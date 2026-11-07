@@ -6,7 +6,7 @@
 // Download the signed Android app from the public login page.
 {
   const installScript = document.createElement("script");
-  installScript.src = "instalar.js?v=1.0.0";
+  installScript.src = "instalar.js?v=1.0.4";
   document.head.appendChild(installScript);
 }
 // Load access controls before allowing any course entry.

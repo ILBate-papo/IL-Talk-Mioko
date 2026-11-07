@@ -1,7 +1,7 @@
 (() => {
-  const build = '20261106-sessao1';
+  const build = '20261107-android104';
   const label = document.createElement('small');
-  label.textContent = 'Sessão mantida · Conversa livre · revisão 06/11';
+  label.textContent = 'Android 1.0.4 · Sessão mantida · revisão 07/11';
   label.style.cssText = 'display:block;text-align:center;color:#bdcde2;margin:8px';
   const button = document.createElement('button');
   button.type = 'button'; button.className = 'nb'; button.textContent = '↻ Atualizar Mioko';
